@@ -5,10 +5,10 @@ import { Target, CheckCircle2, Circle, Trash2, PlusCircle, ServerCog, Activity, 
 const JobManager = () => {
     const { users, addTaskToJob, toggleTaskCompletion, deleteTaskFromJob, updateJobNotes, updateJobDetails, billingCatalog, addBatchInvoiceToJob } = useContext(AdminContext);
 
-    // Filter out users who have at least one job AND are not sub-employees
     const usersWithJobs = users.filter(user => !user.parentClientId && user.jobs && user.jobs.length > 0);
 
-    const [selectedUserId, setSelectedUserId] = useState('');
+    const [selectedUserId, setSelectedUserId] = useState('ALL');
+    const [selectedStatus, setSelectedStatus] = useState('ALL');
     const [selectedSite, setSelectedSite] = useState('');
     const [selectedJobId, setSelectedJobId] = useState('');
 
@@ -37,13 +37,14 @@ const JobManager = () => {
 
     const handleAddTask = (e) => {
         e.preventDefault();
-        if (selectedUserId && selectedJobId && newTaskTitle) {
-            addTaskToJob(selectedUserId, selectedJobId, newTaskTitle, newTaskWeight || null);
+        if (activeJobUserId && selectedJobId && newTaskTitle) {
+            addTaskToJob(activeJobUserId, selectedJobId, newTaskTitle, newTaskWeight || null);
             setNewTaskTitle('');
             setNewTaskWeight('');
         }
     };
 
+    const isGlobalMode = selectedUserId === 'ALL' || selectedUserId === '';
     const selectedUser = users.find(u => u.id === selectedUserId);
 
     // Build options for edit dropdown & job filtering (Primary HQ + Sites)
@@ -52,10 +53,22 @@ const JobManager = () => {
         ...(selectedUser.sites || []).map(s => `${s.companyName} - ${s.location}`)
     ] : [];
 
-    // Filter jobs by selected site (if any)
-    const filteredJobs = selectedUser ? selectedUser.jobs.filter(j => !selectedSite || j.meta?.location === selectedSite) : [];
+    const allJobsContext = isGlobalMode
+        ? usersWithJobs.flatMap(u => (u.jobs || []).map(j => ({ ...j, _userName: u.company, _userId: u.id })))
+        : (selectedUser?.jobs || []);
 
-    const selectedJob = selectedUser?.jobs.find(j => j.id === selectedJobId);
+    const filteredJobs = allJobsContext.filter(j => {
+        const matchesSite = !selectedSite || j.meta?.location === selectedSite;
+        const matchesStatus = selectedStatus === 'ALL' || j.status === selectedStatus;
+        return matchesSite && matchesStatus;
+    });
+
+    const activeJobUserId = (isGlobalMode && selectedJobId)
+        ? usersWithJobs.find(u => u.jobs?.some(j => j.id === selectedJobId))?.id
+        : selectedUserId;
+
+    const realSelectedUser = users.find(u => u.id === activeJobUserId);
+    const selectedJob = realSelectedUser?.jobs.find(j => j.id === selectedJobId);
 
     const [adminNotes, setAdminNotes] = useState('');
     const [isSavingNotes, setIsSavingNotes] = useState(false);
@@ -77,7 +90,7 @@ const JobManager = () => {
     const handleSaveDetails = async () => {
         if (!selectedJob) return;
         setIsSavingDetails(true);
-        await updateJobDetails(selectedUserId, selectedJobId, editLocation, editRequestedBy);
+        await updateJobDetails(activeJobUserId, selectedJobId, editLocation, editRequestedBy);
         setIsSavingDetails(false);
         setIsEditing(false);
     };
@@ -85,7 +98,7 @@ const JobManager = () => {
     const handleSaveNotes = async () => {
         if (!selectedJob) return;
         setIsSavingNotes(true);
-        await updateJobNotes(selectedUserId, selectedJobId, adminNotes);
+        await updateJobNotes(activeJobUserId, selectedJobId, adminNotes);
         setIsSavingNotes(false);
     };
 
@@ -138,8 +151,8 @@ const JobManager = () => {
     };
 
     const handleBatchSubmit = () => {
-        if (selectedUserId && selectedJobId && stagedItems.length > 0) {
-            addBatchInvoiceToJob(selectedUserId, selectedJobId, stagedItems);
+        if (activeJobUserId && selectedJobId && stagedItems.length > 0) {
+            addBatchInvoiceToJob(activeJobUserId, selectedJobId, stagedItems);
             setSuccessMsg(`Successfully billed ${stagedItems.length} items to this job.`);
             setStagedItems([]);
             setTimeout(() => setSuccessMsg(''), 4000);
@@ -174,19 +187,30 @@ const JobManager = () => {
                     <span style={{ color: '#fff' }}>1. Target Activation</span>
                 </div>
 
-                <div style={{ display: 'flex', gap: 'var(--sp-4)' }}>
-                    <div className="form-group" style={{ flex: 1 }}>
+                <div style={{ display: 'flex', gap: 'var(--sp-4)', flexWrap: 'wrap' }}>
+                    <div className="form-group" style={{ flex: 1, minWidth: '150px' }}>
+                        <label className="form-label text-muted">Filter By Status</label>
+                        <select className="form-control" value={selectedStatus} onChange={(e) => { setSelectedStatus(e.target.value); setSelectedJobId(''); }}>
+                            <option value="ALL">All Statuses</option>
+                            <option value="Pending">Pending</option>
+                            <option value="Active">Active</option>
+                            <option value="Completed">Completed</option>
+                            <option value="Paid">Paid</option>
+                        </select>
+                    </div>
+
+                    <div className="form-group" style={{ flex: 1.5, minWidth: '200px' }}>
                         <label className="form-label text-muted">Select Client Account</label>
                         <select className="form-control" value={selectedUserId} onChange={handleUserSelect}>
-                            <option value="">-- Choose Account --</option>
+                            <option value="ALL">-- All Accounts --</option>
                             {usersWithJobs.map(user => (
                                 <option key={user.id} value={user.id}>{user.company}</option>
                             ))}
                         </select>
                     </div>
 
-                    {allSiteOptions.length > 0 && (
-                        <div className="form-group" style={{ flex: 1 }}>
+                    {!isGlobalMode && allSiteOptions.length > 0 && (
+                        <div className="form-group" style={{ flex: 1.5, minWidth: '200px' }}>
                             <label className="form-label text-muted">Select Site Location</label>
                             <select className="form-control" value={selectedSite} onChange={handleSiteSelect} disabled={!selectedUserId}>
                                 <option value="">-- All Sites --</option>
@@ -197,17 +221,18 @@ const JobManager = () => {
                         </div>
                     )}
 
-                    <div className="form-group" style={{ flex: 1 }}>
+                    <div className="form-group" style={{ flex: 2, minWidth: '250px' }}>
                         <label className="form-label text-muted">Select Active Job</label>
                         <select
                             className="form-control"
                             value={selectedJobId}
                             onChange={handleJobSelect}
-                            disabled={!selectedUserId}
                         >
                             <option value="">-- Choose Job --</option>
                             {filteredJobs.map(job => (
-                                <option key={job.id} value={job.id}>{job.title} ({job.status})</option>
+                                <option key={job.id} value={job.id}>
+                                    {isGlobalMode ? `${job._userName} - ` : ''}{job.title} ({job.status})
+                                </option>
                             ))}
                         </select>
                     </div>
@@ -291,7 +316,7 @@ const JobManager = () => {
                                         }}
                                     >
                                         <button
-                                            onClick={() => toggleTaskCompletion(selectedUserId, selectedJobId, task.id)}
+                                            onClick={() => toggleTaskCompletion(activeJobUserId, selectedJobId, task.id)}
                                             style={{
                                                 background: 'none',
                                                 border: 'none',
@@ -324,7 +349,7 @@ const JobManager = () => {
                                         </span>
 
                                         <button
-                                            onClick={() => deleteTaskFromJob(selectedUserId, selectedJobId, task.id)}
+                                            onClick={() => deleteTaskFromJob(activeJobUserId, selectedJobId, task.id)}
                                             style={{ background: 'none', border: 'none', color: '#ff4444', cursor: 'pointer', padding: '4px', marginLeft: '8px', opacity: 0.7 }}
                                         >
                                             <Trash2 size={16} />
@@ -358,7 +383,7 @@ const JobManager = () => {
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                                 <div>
                                     <span className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>Company</span>
-                                    <div style={{ color: '#fff', fontWeight: '500' }}>{selectedUser.company}</div>
+                                    <div style={{ color: '#fff', fontWeight: '500' }}>{realSelectedUser?.company}</div>
                                 </div>
 
                                 {isEditing ? (
