@@ -1,8 +1,15 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import { NavLink, Link } from 'react-router-dom';
-import { Cpu, LayoutDashboard, PlusCircle, LogOut, FileText, MapPin } from 'lucide-react';
+import { Cpu, LayoutDashboard, PlusCircle, LogOut, FileText, MapPin, Users } from 'lucide-react';
+import { AdminContext } from '../../AdminContext';
 
 const Sidebar = () => {
+    const { users, loggedInUserId } = useContext(AdminContext);
+    const loggedInUser = users.find(u => u.id === loggedInUserId);
+
+    const isEmployee = !!loggedInUser?.parentClientId;
+    const canViewBilling = !isEmployee || loggedInUser?.permissions?.canViewBilling;
+
     return (
         <aside className="dashboard-sidebar">
             <div className="sidebar-header">
@@ -24,15 +31,30 @@ const Sidebar = () => {
                             Overview
                         </NavLink>
                     </li>
-                    <li>
-                        <NavLink
-                            to="/dashboard/sites"
-                            className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}
-                        >
-                            <MapPin size={20} />
-                            My Sites
-                        </NavLink>
-                    </li>
+                    {/* Only Primary Account Holders can manage sites and team */}
+                    {!isEmployee && (
+                        <>
+                            <li>
+                                <NavLink
+                                    to="/dashboard/sites"
+                                    className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}
+                                >
+                                    <MapPin size={20} />
+                                    My Sites
+                                </NavLink>
+                            </li>
+                            <li>
+                                <NavLink
+                                    to="/dashboard/team"
+                                    className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}
+                                >
+                                    <Users size={20} />
+                                    Team / Employees
+                                </NavLink>
+                            </li>
+                        </>
+                    )}
+
                     <li>
                         <NavLink
                             to="/dashboard/request"
@@ -42,15 +64,19 @@ const Sidebar = () => {
                             New Request
                         </NavLink>
                     </li>
-                    <li>
-                        <NavLink
-                            to="/dashboard/billing"
-                            className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}
-                        >
-                            <FileText size={20} />
-                            Invoices & Billing
-                        </NavLink>
-                    </li>
+
+                    {/* Conditionally reveal Billing based on explicit JSON permissions */}
+                    {canViewBilling && (
+                        <li>
+                            <NavLink
+                                to="/dashboard/billing"
+                                className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}
+                            >
+                                <FileText size={20} />
+                                Invoices & Billing
+                            </NavLink>
+                        </li>
+                    )}
                 </ul>
             </nav>
 

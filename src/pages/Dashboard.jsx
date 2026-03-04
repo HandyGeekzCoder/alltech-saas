@@ -5,6 +5,7 @@ import Overview from '../components/Dashboard/Overview';
 import JobRequest from '../components/Dashboard/JobRequest';
 import Billing from '../components/Dashboard/Billing';
 import SitesManager from '../components/Dashboard/SitesManager';
+import EmployeeManager from '../components/Dashboard/EmployeeManager';
 import PasswordResetModal from '../components/Client/PasswordResetModal';
 import { AdminContext } from '../AdminContext';
 import '../Dashboard.css';
@@ -28,6 +29,7 @@ const Dashboard = () => {
                 <Routes>
                     <Route path="/" element={<Overview />} />
                     <Route path="sites" element={<SitesManager />} />
+                    <Route path="team" element={<EmployeeManager />} />
                     <Route path="request" element={<JobRequest />} />
                     <Route path="billing" element={<Billing />} />
                 </Routes>

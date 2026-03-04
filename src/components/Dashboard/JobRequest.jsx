@@ -8,14 +8,44 @@ const JobRequest = () => {
     const loggedInUser = users.find(u => u.id === loggedInUserId);
     const [submitted, setSubmitted] = useState(false);
 
+    // Permission checks
+    const isEmployee = !!loggedInUser?.parentClientId;
+    const canRequestJobs = !isEmployee || loggedInUser?.permissions?.canRequestJobs;
+    const allowedSitesIds = loggedInUser?.permissions?.allowedSites || [];
+
+    // Filter sites
+    const allSites = loggedInUser?.sites || [];
+    const sites = isEmployee ? allSites.filter(s => allowedSitesIds.includes(s.id)) : allSites;
+    const canSelectPrimaryHQ = !isEmployee || allowedSitesIds.includes('primary-hq');
+
     // Form states
     const [serviceType, setServiceType] = useState('');
     const [urgency, setUrgency] = useState('normal');
-    // Default location holds a special token or the literal primary HQ string
-    const [location, setLocation] = useState(`${loggedInUser?.company} (Primary HQ)`);
+
+    // Default location
+    const defaultLocation = canSelectPrimaryHQ
+        ? `${loggedInUser?.company} (Primary HQ)`
+        : (sites.length > 0 ? `${sites[0].companyName} - ${sites[0].location}` : '');
+
+    const [location, setLocation] = useState(defaultLocation);
     const [details, setDetails] = useState('');
 
-    const sites = loggedInUser?.sites || [];
+    if (!canRequestJobs) {
+        return (
+            <div>
+                <div className="dashboard-topbar">
+                    <h2>Request New Job</h2>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-4)' }}>
+                        <span className="text-muted">{loggedInUser?.company}</span>
+                        <ClientAvatarDropdown />
+                    </div>
+                </div>
+                <div className="glass-panel" style={{ padding: 'var(--sp-8)', textAlign: 'center' }}>
+                    <p className="text-muted" style={{ fontSize: '1.1rem' }}>You do not have permission to request new IT Service Jobs. Please contact your account administrator.</p>
+                </div>
+            </div>
+        );
+    }
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -35,7 +65,7 @@ const JobRequest = () => {
         // Reset form
         setServiceType('');
         setUrgency('normal');
-        setLocation(`${loggedInUser?.company} (Primary HQ)`);
+        setLocation(defaultLocation);
         setDetails('');
 
         setTimeout(() => setSubmitted(false), 3000);
@@ -101,9 +131,11 @@ const JobRequest = () => {
                             value={location}
                             onChange={(e) => setLocation(e.target.value)}
                         >
-                            <option value={`${loggedInUser?.company} (Primary HQ)`}>
-                                {loggedInUser?.company} (Primary HQ)
-                            </option>
+                            {canSelectPrimaryHQ && (
+                                <option value={`${loggedInUser?.company} (Primary HQ)`}>
+                                    {loggedInUser?.company} (Primary HQ)
+                                </option>
+                            )}
                             {sites.map(site => (
                                 <option key={site.id} value={`${site.companyName} - ${site.location}`}>
                                     {site.companyName} - {site.location}

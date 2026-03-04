@@ -100,12 +100,14 @@ export const AdminProvider = ({ children }) => {
 
             if (profilesRes) {
                 const fullUsers = await Promise.all(profilesRes.map(async (profile) => {
+                    const targetProfileId = profile.parent_client_id || profile.id;
+
                     // Get Sites for Profile
-                    const { data: sitesRes } = await supabase.from('sites').select('*').eq('user_id', profile.id);
+                    const { data: sitesRes } = await supabase.from('sites').select('*').eq('user_id', targetProfileId);
                     const sitesList = sitesRes || [];
 
                     // Get Jobs for Profile
-                    const { data: jobsRes } = await supabase.from('jobs').select('*').eq('user_id', profile.id);
+                    const { data: jobsRes } = await supabase.from('jobs').select('*').eq('user_id', targetProfileId);
                     const jobsList = jobsRes || [];
 
                     // Hydrate Jobs
@@ -137,6 +139,8 @@ export const AdminProvider = ({ children }) => {
                         email: profile.email,
                         isTemporaryPassword: profile.is_temporary_password,
                         role: profile.role,
+                        parentClientId: profile.parent_client_id,
+                        permissions: profile.permissions || {},
                         sites: sitesList.map(s => ({
                             id: s.id,
                             companyName: s.company_name,
@@ -337,6 +341,8 @@ export const AdminProvider = ({ children }) => {
                     email: newProfile.email,
                     isTemporaryPassword: newProfile.is_temporary_password,
                     role: newProfile.role,
+                    parentClientId: null,
+                    permissions: {},
                     sites: [],
                     jobs: [],
                     password: tempPassword // keep this just for the admin UI to display it
@@ -344,6 +350,53 @@ export const AdminProvider = ({ children }) => {
                 setUsers(prev => [...prev, uiUser]);
             }
         }
+    };
+
+    const addEmployeeToClient = async (parentClientId, employeeName, employeeEmail, tempPassword, permissions) => {
+        // Create Supabase Auth User
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+            email: employeeEmail,
+            password: tempPassword,
+        });
+
+        if (authError || !authData?.user) {
+            console.error("Auth creation failed:", authError);
+            return { error: authError };
+        }
+
+        const newProfile = {
+            id: authData.user.id,
+            company: employeeName,
+            email: employeeEmail,
+            is_temporary_password: true,
+            role: 'client',
+            parent_client_id: parentClientId,
+            permissions: permissions
+        };
+
+        const { error: profileError } = await supabase.from('profiles').insert(newProfile);
+
+        if (!profileError) {
+            // Find parent to inherit jobs and sites for the UI state
+            setUsers(prev => {
+                const parent = prev.find(u => u.id === parentClientId);
+                const uiUser = {
+                    id: newProfile.id,
+                    company: newProfile.company,
+                    email: newProfile.email,
+                    isTemporaryPassword: newProfile.is_temporary_password,
+                    role: newProfile.role,
+                    parentClientId: newProfile.parent_client_id,
+                    permissions: newProfile.permissions,
+                    sites: parent ? parent.sites : [],
+                    jobs: parent ? parent.jobs : [],
+                    password: tempPassword
+                };
+                return [...prev, uiUser];
+            });
+            return { success: true };
+        }
+        return { error: profileError };
     };
 
     const updateClientPassword = async (userId, newPassword) => {
@@ -401,19 +454,24 @@ export const AdminProvider = ({ children }) => {
     };
 
     const addJobToAccount = async (userId, title, type, urgency, location, details) => {
+        // If the acting userId belongs to an employee, resolve the parent ID
+        const actingUser = users.find(u => u.id === userId);
+        const targetUserId = actingUser?.parentClientId || userId;
+
         const newJob = {
             id: `JOB-${Math.floor(1000 + Math.random() * 9000)}`,
-            user_id: userId,
+            user_id: targetUserId,
             title: title || `${type.toUpperCase()} Request`,
             status: 'Pending Review',
             progress: 0,
             date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-            meta: { urgency, location, details }
+            meta: { urgency, location, details, requested_by: actingUser?.company }
         };
 
         // UI Optimistic
         setUsers(prev => prev.map(user => {
-            if (user.id === userId) {
+            const resolvedId = user.parentClientId || user.id;
+            if (resolvedId === targetUserId) {
                 return { ...user, jobs: [{ ...newJob, tasks: [], lineItems: [] }, ...user.jobs] };
             }
             return user;
@@ -617,7 +675,7 @@ export const AdminProvider = ({ children }) => {
             addCatalogItem, updateCatalogItem, deleteCatalogItem,
             addTaskToJob, toggleTaskCompletion, deleteTaskFromJob,
             addClientAccount, updateClientPassword, addJobToAccount,
-            addSiteToAccount, deleteSiteFromAccount,
+            addSiteToAccount, deleteSiteFromAccount, addEmployeeToClient,
             isLoading
         }}>
             {children}
