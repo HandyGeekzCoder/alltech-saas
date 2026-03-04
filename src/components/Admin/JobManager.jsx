@@ -46,14 +46,11 @@ const JobManager = () => {
 
     const selectedUser = users.find(u => u.id === selectedUserId);
 
-    // Build options for edit dropdown (Primary HQ + Sites)
+    // Build options for edit dropdown & job filtering (Primary HQ + Sites)
     const allSiteOptions = selectedUser ? [
         `${selectedUser.company} (Primary HQ)`,
         ...(selectedUser.sites || []).map(s => `${s.companyName} - ${s.location}`)
     ] : [];
-
-    // Extract unique sites from this user's jobs
-    const availableSites = selectedUser ? [...new Set(selectedUser.jobs.map(j => j.meta?.location).filter(Boolean))] : [];
 
     // Filter jobs by selected site (if any)
     const filteredJobs = selectedUser ? selectedUser.jobs.filter(j => !selectedSite || j.meta?.location === selectedSite) : [];
@@ -188,12 +185,12 @@ const JobManager = () => {
                         </select>
                     </div>
 
-                    {availableSites.length > 0 && (
+                    {allSiteOptions.length > 0 && (
                         <div className="form-group" style={{ flex: 1 }}>
                             <label className="form-label text-muted">Select Site Location</label>
                             <select className="form-control" value={selectedSite} onChange={handleSiteSelect} disabled={!selectedUserId}>
                                 <option value="">-- All Sites --</option>
-                                {availableSites.map((site, i) => (
+                                {allSiteOptions.map((site, i) => (
                                     <option key={i} value={site}>{site}</option>
                                 ))}
                             </select>
