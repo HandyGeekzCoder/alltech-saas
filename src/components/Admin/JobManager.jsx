@@ -59,7 +59,16 @@ const JobManager = () => {
 
     const filteredJobs = allJobsContext.filter(j => {
         const matchesSite = !selectedSite || j.meta?.location === selectedSite;
-        const matchesStatus = selectedStatus === 'ALL' || j.status === selectedStatus;
+
+        let matchesStatus = false;
+        if (selectedStatus === 'ALL') {
+            matchesStatus = true;
+        } else if (selectedStatus === 'Pending') {
+            matchesStatus = j.status === 'Pending' || j.status === 'Pending Review';
+        } else {
+            matchesStatus = j.status === selectedStatus;
+        }
+
         return matchesSite && matchesStatus;
     });
 
