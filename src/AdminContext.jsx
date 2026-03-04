@@ -481,6 +481,28 @@ export const AdminProvider = ({ children }) => {
         await supabase.from('jobs').insert(newJob);
     };
 
+    const updateJobNotes = async (userId, jobId, notes) => {
+        // UI Optimistic Update
+        setUsers(prev => prev.map(user => {
+            if (user.id === userId) {
+                return {
+                    ...user,
+                    jobs: user.jobs.map(job =>
+                        job.id === jobId ? { ...job, meta: { ...job.meta, adminNotes: notes } } : job
+                    )
+                };
+            }
+            return user;
+        }));
+
+        // Fetch existing meta first
+        const { data: jobData } = await supabase.from('jobs').select('meta').eq('id', jobId).single();
+        const currentMeta = jobData?.meta || {};
+
+        // Push merged JSONB to DB
+        await supabase.from('jobs').update({ meta: { ...currentMeta, adminNotes: notes } }).eq('id', jobId);
+    };
+
     const addBatchInvoiceToJob = async (userId, jobId, itemsArray) => {
         const newCatalogAdditions = [];
 
@@ -674,7 +696,7 @@ export const AdminProvider = ({ children }) => {
             billingCatalog, addBatchInvoiceToJob,
             addCatalogItem, updateCatalogItem, deleteCatalogItem,
             addTaskToJob, toggleTaskCompletion, deleteTaskFromJob,
-            addClientAccount, updateClientPassword, addJobToAccount,
+            addClientAccount, updateClientPassword, addJobToAccount, updateJobNotes,
             addSiteToAccount, deleteSiteFromAccount, addEmployeeToClient,
             isLoading
         }}>

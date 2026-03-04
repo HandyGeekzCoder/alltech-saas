@@ -3,12 +3,13 @@ import { AdminContext } from '../../AdminContext';
 import { Target, CheckCircle2, Circle, Trash2, PlusCircle, ServerCog, Activity, Clock } from 'lucide-react';
 
 const JobManager = () => {
-    const { users, addTaskToJob, toggleTaskCompletion, deleteTaskFromJob } = useContext(AdminContext);
+    const { users, addTaskToJob, toggleTaskCompletion, deleteTaskFromJob, updateJobNotes } = useContext(AdminContext);
 
-    // Filter out users who have at least one job
-    const usersWithJobs = users.filter(user => user.jobs && user.jobs.length > 0);
+    // Filter out users who have at least one job AND are not sub-employees
+    const usersWithJobs = users.filter(user => !user.parentClientId && user.jobs && user.jobs.length > 0);
 
     const [selectedUserId, setSelectedUserId] = useState('');
+    const [selectedSite, setSelectedSite] = useState('');
     const [selectedJobId, setSelectedJobId] = useState('');
 
     // New Task State
@@ -17,7 +18,13 @@ const JobManager = () => {
 
     const handleUserSelect = (e) => {
         setSelectedUserId(e.target.value);
+        setSelectedSite('');
         setSelectedJobId(''); // Reset job selection when user changes
+    };
+
+    const handleSiteSelect = (e) => {
+        setSelectedSite(e.target.value);
+        setSelectedJobId('');
     };
 
     const handleJobSelect = (e) => {
@@ -35,7 +42,30 @@ const JobManager = () => {
 
     // Derived context
     const selectedUser = users.find(u => u.id === selectedUserId);
+
+    // Extract unique sites from this user's jobs
+    const availableSites = selectedUser ? [...new Set(selectedUser.jobs.map(j => j.meta?.location).filter(Boolean))] : [];
+
+    // Filter jobs by selected site (if any)
+    const filteredJobs = selectedUser ? selectedUser.jobs.filter(j => !selectedSite || j.meta?.location === selectedSite) : [];
+
     const selectedJob = selectedUser?.jobs.find(j => j.id === selectedJobId);
+
+    const [adminNotes, setAdminNotes] = useState('');
+    const [isSavingNotes, setIsSavingNotes] = useState(false);
+
+    React.useEffect(() => {
+        if (selectedJob) {
+            setAdminNotes(selectedJob.meta?.adminNotes || '');
+        }
+    }, [selectedJobId]);
+
+    const handleSaveNotes = async () => {
+        if (!selectedJob) return;
+        setIsSavingNotes(true);
+        await updateJobNotes(selectedUserId, selectedJobId, adminNotes);
+        setIsSavingNotes(false);
+    };
 
     // Calculate unweighted vs weighted totals for UI badge
     const tasks = selectedJob?.tasks || [];
@@ -73,6 +103,18 @@ const JobManager = () => {
                         </select>
                     </div>
 
+                    {availableSites.length > 0 && (
+                        <div className="form-group" style={{ flex: 1 }}>
+                            <label className="form-label text-muted">Select Site Location</label>
+                            <select className="form-control" value={selectedSite} onChange={handleSiteSelect} disabled={!selectedUserId}>
+                                <option value="">-- All Sites --</option>
+                                {availableSites.map((site, i) => (
+                                    <option key={i} value={site}>{site}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+
                     <div className="form-group" style={{ flex: 1 }}>
                         <label className="form-label text-muted">Select Active Job</label>
                         <select
@@ -82,7 +124,7 @@ const JobManager = () => {
                             disabled={!selectedUserId}
                         >
                             <option value="">-- Choose Job --</option>
-                            {selectedUser?.jobs.map(job => (
+                            {filteredJobs.map(job => (
                                 <option key={job.id} value={job.id}>{job.title} ({job.status})</option>
                             ))}
                         </select>
@@ -227,6 +269,18 @@ const JobManager = () => {
                                 <span className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>Company</span>
                                 <div style={{ color: '#fff', fontWeight: '500' }}>{selectedUser.company}</div>
                             </div>
+                            {selectedJob.meta?.requested_by && (
+                                <div>
+                                    <span className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>Requested By</span>
+                                    <div style={{ color: '#fff' }}>{selectedJob.meta.requested_by}</div>
+                                </div>
+                            )}
+                            {selectedJob.meta?.location && (
+                                <div>
+                                    <span className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>Location</span>
+                                    <div style={{ color: '#00b3ff' }}>{selectedJob.meta.location}</div>
+                                </div>
+                            )}
                             <div>
                                 <span className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>Job Status</span>
                                 <div>
@@ -246,6 +300,27 @@ const JobManager = () => {
                             <div>
                                 <span className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>Timeline</span>
                                 <div style={{ color: '#fff' }}>{selectedJob.date}</div>
+                            </div>
+
+                            <hr style={{ borderColor: 'rgba(255,255,255,0.1)', margin: '8px 0' }} />
+
+                            <div>
+                                <span className="text-muted" style={{ fontSize: 'var(--text-sm)', display: 'block', marginBottom: '8px' }}>Internal Admin Notes</span>
+                                <textarea
+                                    className="form-control"
+                                    style={{ background: 'rgba(0,0,0,0.3)', minHeight: '100px', fontSize: '14px', marginBottom: '8px' }}
+                                    placeholder="Add private deployment notes here..."
+                                    value={adminNotes}
+                                    onChange={(e) => setAdminNotes(e.target.value)}
+                                ></textarea>
+                                <button
+                                    className="btn-secondary"
+                                    style={{ width: '100%', padding: '8px', fontSize: '13px' }}
+                                    onClick={handleSaveNotes}
+                                    disabled={isSavingNotes}
+                                >
+                                    {isSavingNotes ? 'Saving...' : 'Save Notes'}
+                                </button>
                             </div>
                         </div>
                     </div>
