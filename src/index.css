@@ -232,3 +232,102 @@ img {
         transform: translateY(0px);
     }
 }
+
+/* ========================================= */
+/* PRINT STYLES (INVOICES & REPORTS)         */
+/* ========================================= */
+@media print {
+    body {
+        background-color: white !important;
+        background-image: none !important;
+        color: black !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    /* Hide everything by default in print mode */
+    .app-container,
+    .admin-sidebar,
+    .dashboard-topbar,
+    .glass-panel,
+    button,
+    select,
+    input {
+        display: none !important;
+    }
+
+    /* Only show elements explicitly tagged for print */
+    .print-only {
+        display: block !important;
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        min-height: 100vh;
+        background: white;
+        padding: 40px;
+        font-family: 'Inter', sans-serif;
+    }
+
+    .print-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        border-bottom: 2px solid #eee;
+        padding-bottom: 20px;
+        margin-bottom: 30px;
+    }
+
+    .print-logo {
+        max-width: 200px;
+    }
+
+    .print-meta {
+        text-align: right;
+        color: #555;
+    }
+
+    .print-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+    }
+
+    .print-table th {
+        background: #f8f9fa !important;
+        border-bottom: 2px solid #ddd;
+        padding: 12px;
+        text-align: left;
+        color: #333;
+        font-weight: bold;
+    }
+
+    .print-table td {
+        padding: 12px;
+        border-bottom: 1px solid #eee;
+        color: #222;
+    }
+
+    .print-totals {
+        margin-top: 30px;
+        float: right;
+        min-width: 300px;
+    }
+
+    .print-totals-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px 0;
+        border-bottom: 1px solid #eee;
+    }
+
+    .print-totals-row.grand-total {
+        font-size: 1.25rem;
+        font-weight: bold;
+        border-top: 2px solid #333;
+        border-bottom: none;
+        padding-top: 12px;
+    }
+}

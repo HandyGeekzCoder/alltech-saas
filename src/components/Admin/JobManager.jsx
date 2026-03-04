@@ -1,6 +1,6 @@
 import React, { useContext, useState } from 'react';
 import { AdminContext } from '../../AdminContext';
-import { Target, CheckCircle2, Circle, Trash2, PlusCircle, ServerCog, Activity, Clock, DollarSign } from 'lucide-react';
+import { Target, CheckCircle2, Circle, Trash2, PlusCircle, ServerCog, Activity, Clock, DollarSign, Printer } from 'lucide-react';
 
 const JobManager = () => {
     const { users, addTaskToJob, toggleTaskCompletion, deleteTaskFromJob, updateJobNotes, updateJobDetails, billingCatalog, addBatchInvoiceToJob } = useContext(AdminContext);
@@ -179,6 +179,30 @@ const JobManager = () => {
     let claimedWeight = weightedTasks.reduce((acc, t) => acc + t.weight, 0);
     if (claimedWeight > 100) claimedWeight = 100;
     const defaultWeightPerTask = unweightedTasks.length > 0 ? ((100 - claimedWeight) / unweightedTasks.length) : 0;
+
+    const handlePrintInvoice = () => {
+        window.print();
+    };
+
+    const hasLineItems = selectedJob?.lineItems && selectedJob.lineItems.length > 0;
+
+    // Auto calculate if there's any tax configuration based on the active Job's site
+    let appliedTaxRate = 0;
+    if (realSelectedUser && selectedJob?.meta?.location) {
+        // Attempt to find the specific site string match to extract the linked decimal tax rate
+        const matchedSite = realSelectedUser.sites?.find(s => `${s.companyName} - ${s.location}` === selectedJob.meta.location);
+        if (matchedSite && matchedSite.taxRate > 0) {
+            appliedTaxRate = matchedSite.taxRate / 100;
+        }
+    }
+
+    let dbSubtotal = 0;
+    if (hasLineItems) {
+        dbSubtotal = selectedJob.lineItems.reduce((acc, current) => acc + (current.amount * current.quantity), 0);
+    }
+
+    const dbTaxAmount = dbSubtotal * appliedTaxRate;
+    const dbGrandTotal = dbSubtotal + dbTaxAmount;
 
     return (
         <div>
@@ -489,6 +513,25 @@ const JobManager = () => {
                                         {isSavingNotes ? 'Saving...' : 'Save Notes'}
                                     </button>
                                 </div>
+
+                                {hasLineItems && (
+                                    <button
+                                        onClick={handlePrintInvoice}
+                                        className="btn-secondary"
+                                        style={{
+                                            width: '100%',
+                                            marginTop: 'var(--sp-4)',
+                                            display: 'flex',
+                                            justifyContent: 'center',
+                                            alignItems: 'center',
+                                            gap: '8px',
+                                            borderColor: '#00b3ff',
+                                            color: '#00b3ff'
+                                        }}
+                                    >
+                                        <Printer size={16} /> Print Official Invoice
+                                    </button>
+                                )}
                             </div>
                         </div>
 
@@ -607,6 +650,90 @@ const JobManager = () => {
                         </div>
                     </div>
 
+                </div>
+            )}
+
+            {/* Print Only Payload */}
+            {selectedJob && hasLineItems && (
+                <div className="print-only">
+                    <div className="print-header">
+                        <div>
+                            {/* Dummy SVG Logo for printing purposes */}
+                            <svg width="180" height="40" viewBox="0 0 180 40" xmlns="http://www.w3.org/2000/svg">
+                                <text x="0" y="28" fontFamily="Outfit, sans-serif" fontSize="28" fontWeight="800" fill="#050508">ALLTECH</text>
+                                <text x="118" y="28" fontFamily="Outfit, sans-serif" fontSize="28" fontWeight="300" fill="#7000ff">SaaS</text>
+                            </svg>
+                            <div style={{ marginTop: '8px', color: '#555', fontSize: '0.9rem' }}>
+                                123 Tech Boulevard<br />
+                                Suite 400<br />
+                                Innovation City, IN 40291<br />
+                                billing@alltech-saas.com
+                            </div>
+                        </div>
+                        <div className="print-meta">
+                            <h2 style={{ color: '#222', margin: '0 0 8px 0', fontSize: '2rem', textTransform: 'uppercase' }}>Invoice</h2>
+                            <div style={{ fontWeight: 'bold', fontSize: '1.2rem', marginBottom: '4px' }}>INV-{selectedJob.id.split('-')[0].toUpperCase()}</div>
+                            <div>Date: {new Date().toLocaleDateString()}</div>
+                            <div style={{ marginTop: '16px' }}>
+                                <strong style={{ color: '#222', display: 'block', marginBottom: '4px' }}>Billed To:</strong>
+                                <div>{realSelectedUser?.company}</div>
+                                <div>{selectedJob.meta?.requested_by || 'Client Agent'}</div>
+                                <div style={{ maxWidth: '200px', marginLeft: 'auto' }}>
+                                    {selectedJob.meta?.location || 'Primary HQ'}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style={{ marginBottom: '24px', padding: '16px', background: '#f8f9fa', borderLeft: '4px solid #7000ff' }}>
+                        <h3 style={{ margin: '0 0 4px 0', color: '#333' }}>Project Reference</h3>
+                        <div style={{ fontSize: '1.1rem', fontWeight: '500', color: '#555' }}>{selectedJob.title}</div>
+                    </div>
+
+                    <table className="print-table">
+                        <thead>
+                            <tr>
+                                <th style={{ width: '10%' }}>Qty</th>
+                                <th style={{ width: '60%' }}>Description</th>
+                                <th style={{ width: '15%', textAlign: 'right' }}>Unit Price</th>
+                                <th style={{ width: '15%', textAlign: 'right' }}>Line Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {selectedJob.lineItems.map(item => (
+                                <tr key={item.id}>
+                                    <td style={{ fontWeight: 'bold' }}>{item.quantity}</td>
+                                    <td>{item.description}</td>
+                                    <td style={{ textAlign: 'right' }}>${item.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                                    <td style={{ textAlign: 'right', fontWeight: '500' }}>${(item.amount * item.quantity).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+
+                    <div className="print-totals">
+                        <div className="print-totals-row">
+                            <span>Subtotal:</span>
+                            <span>${dbSubtotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                        </div>
+
+                        {appliedTaxRate > 0 && (
+                            <div className="print-totals-row">
+                                <span style={{ color: '#666' }}>Sales Tax ({(appliedTaxRate * 100).toFixed(2)}%):</span>
+                                <span>${dbTaxAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                            </div>
+                        )}
+
+                        <div className="print-totals-row grand-total">
+                            <span>Amount Due:</span>
+                            <span>${dbGrandTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                        </div>
+                    </div>
+
+                    <div style={{ clear: 'both', paddingTop: '60px', borderTop: '1px solid #eee', marginTop: '60px', textAlign: 'center', color: '#777', fontSize: '0.9rem' }}>
+                        <p>Thank you for your business.</p>
+                        <p>Please make all checks payable to AllTech SaaS. Payment is due within 30 days.</p>
+                    </div>
                 </div>
             )}
         </div>
