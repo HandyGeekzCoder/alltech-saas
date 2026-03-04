@@ -164,7 +164,8 @@ export const AdminProvider = ({ children }) => {
                         sites: sitesList.map(s => ({
                             id: s.id,
                             companyName: s.company_name,
-                            location: s.location
+                            location: s.location,
+                            taxRate: s.tax_rate || 0
                         })),
                         jobs: hydratedJobs
                     };
@@ -434,11 +435,12 @@ export const AdminProvider = ({ children }) => {
         ));
     };
 
-    const addSiteToAccount = async (userId, companyName, location) => {
+    const addSiteToAccount = async (userId, companyName, location, taxRate) => {
         const { data, error } = await supabase.from('sites').insert({
             user_id: userId,
             company_name: companyName,
-            location: location
+            location: location,
+            tax_rate: parseFloat(taxRate) || 0
         }).select().single();
 
         if (data && !error) {
@@ -449,7 +451,8 @@ export const AdminProvider = ({ children }) => {
                         sites: [...(user.sites || []), {
                             id: data.id,
                             companyName: data.company_name,
-                            location: data.location
+                            location: data.location,
+                            taxRate: data.tax_rate || 0
                         }]
                     };
                 }
@@ -466,6 +469,33 @@ export const AdminProvider = ({ children }) => {
                     return {
                         ...user,
                         sites: (user.sites || []).filter(s => s.id !== siteId)
+                    };
+                }
+                return user;
+            }));
+        }
+    };
+
+    const updateSiteDetails = async (userId, siteId, updatedCompanyName, updatedLocation, updatedTaxRate) => {
+        const { error } = await supabase.from('sites').update({
+            company_name: updatedCompanyName,
+            location: updatedLocation,
+            tax_rate: parseFloat(updatedTaxRate) || 0
+        }).eq('id', siteId);
+
+        if (!error) {
+            setUsers(prev => prev.map(user => {
+                if (user.id === userId) {
+                    return {
+                        ...user,
+                        sites: (user.sites || []).map(s =>
+                            s.id === siteId ? {
+                                ...s,
+                                companyName: updatedCompanyName,
+                                location: updatedLocation,
+                                taxRate: parseFloat(updatedTaxRate) || 0
+                            } : s
+                        )
                     };
                 }
                 return user;
@@ -551,6 +581,26 @@ export const AdminProvider = ({ children }) => {
     const addBatchInvoiceToJob = async (userId, jobId, itemsArray) => {
         const newCatalogAdditions = [];
 
+        // --- Tax Auto-Calculation Logic ---
+        const targetUser = users.find(u => u.id === userId);
+        const targetJob = targetUser?.jobs.find(j => j.id === jobId);
+
+        let applicableTaxRate = 0;
+        if (targetUser && targetJob?.meta?.location) {
+            const isPrimaryHQ = targetJob.meta.location === `${targetUser.company} (Primary HQ)`;
+            if (!isPrimaryHQ) {
+                const matchedSite = targetUser.sites?.find(
+                    s => `${s.companyName} - ${s.location}` === targetJob.meta.location
+                );
+                if (matchedSite && matchedSite.taxRate) {
+                    applicableTaxRate = parseFloat(matchedSite.taxRate);
+                }
+            }
+        }
+
+        let runningSubtotal = 0;
+        // ----------------------------------
+
         const preparedLineItems = itemsArray.map(item => {
             const exists = billingCatalog.find(cat => cat.description.toLowerCase() === item.description.toLowerCase());
             if (!exists) {
@@ -561,14 +611,29 @@ export const AdminProvider = ({ children }) => {
                 });
             }
 
+            const itemLineTotal = parseFloat(item.amount) * parseInt(item.quantity, 10);
+            runningSubtotal += itemLineTotal;
+
             return {
                 id: `li_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                 job_id: jobId,
                 description: item.description,
-                amount: parseFloat(item.amount) * parseInt(item.quantity, 10),
+                amount: itemLineTotal,
                 date_added: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
             };
         });
+
+        // Inject automated Sales Tax line item if physical site warrants it
+        if (applicableTaxRate > 0 && runningSubtotal > 0) {
+            const taxAmount = runningSubtotal * (applicableTaxRate / 100);
+            preparedLineItems.push({
+                id: `li_${Date.now()}_${Math.random().toString(36).substr(2, 9)}_tax`,
+                job_id: jobId,
+                description: `Sales Tax (${applicableTaxRate}%)`,
+                amount: parseFloat(taxAmount.toFixed(2)),
+                date_added: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+            });
+        }
 
         // Add missing elements to catalog
         if (newCatalogAdditions.length > 0) {
@@ -742,7 +807,7 @@ export const AdminProvider = ({ children }) => {
             addCatalogItem, updateCatalogItem, deleteCatalogItem,
             addTaskToJob, toggleTaskCompletion, deleteTaskFromJob,
             addClientAccount, updateClientPassword, addJobToAccount, updateJobNotes, updateJobDetails,
-            addSiteToAccount, deleteSiteFromAccount, addEmployeeToClient,
+            addSiteToAccount, deleteSiteFromAccount, updateSiteDetails, addEmployeeToClient,
             isLoading
         }}>
             {children}

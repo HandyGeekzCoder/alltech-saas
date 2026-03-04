@@ -1,9 +1,9 @@
 import React, { useContext, useState } from 'react';
 import { AdminContext } from '../../AdminContext';
-import { Target, CheckCircle2, Circle, Trash2, PlusCircle, ServerCog, Activity, Clock } from 'lucide-react';
+import { Target, CheckCircle2, Circle, Trash2, PlusCircle, ServerCog, Activity, Clock, DollarSign } from 'lucide-react';
 
 const JobManager = () => {
-    const { users, addTaskToJob, toggleTaskCompletion, deleteTaskFromJob, updateJobNotes, updateJobDetails } = useContext(AdminContext);
+    const { users, addTaskToJob, toggleTaskCompletion, deleteTaskFromJob, updateJobNotes, updateJobDetails, billingCatalog, addBatchInvoiceToJob } = useContext(AdminContext);
 
     // Filter out users who have at least one job AND are not sub-employees
     const usersWithJobs = users.filter(user => !user.parentClientId && user.jobs && user.jobs.length > 0);
@@ -20,15 +20,19 @@ const JobManager = () => {
         setSelectedUserId(e.target.value);
         setSelectedSite('');
         setSelectedJobId(''); // Reset job selection when user changes
+        setStagedItems([]);
     };
 
     const handleSiteSelect = (e) => {
         setSelectedSite(e.target.value);
         setSelectedJobId('');
+        setStagedItems([]);
     };
 
     const handleJobSelect = (e) => {
         setSelectedJobId(e.target.value);
+        setStagedItems([]);
+        setSuccessMsg('');
     };
 
     const handleAddTask = (e) => {
@@ -87,6 +91,66 @@ const JobManager = () => {
         await updateJobNotes(selectedUserId, selectedJobId, adminNotes);
         setIsSavingNotes(false);
     };
+
+    // --- Invoice Builder State & Handlers ---
+    const [stagedItems, setStagedItems] = useState([]);
+    const [selectedCatalogId, setSelectedCatalogId] = useState('');
+    const [chargeDesc, setChargeDesc] = useState('');
+    const [chargeAmount, setChargeAmount] = useState('');
+    const [chargeQty, setChargeQty] = useState(1);
+    const [successMsg, setSuccessMsg] = useState('');
+
+    const handleCatalogSelect = (e) => {
+        const val = e.target.value;
+        setSelectedCatalogId(val);
+
+        if (val === 'custom' || val === '') {
+            setChargeDesc('');
+            setChargeAmount('');
+        } else {
+            const item = billingCatalog.find(c => c.id === val);
+            if (item) {
+                setChargeDesc(item.description);
+                setChargeAmount(item.defaultPrice);
+            }
+        }
+    };
+
+    const handleAddStagedItem = (e) => {
+        e.preventDefault();
+        if (chargeDesc && chargeAmount && chargeQty > 0) {
+            setStagedItems(prev => [
+                ...prev,
+                {
+                    id: `draft_${Date.now()}`,
+                    description: chargeDesc,
+                    amount: parseFloat(chargeAmount),
+                    quantity: parseInt(chargeQty, 10)
+                }
+            ]);
+
+            setSelectedCatalogId('');
+            setChargeDesc('');
+            setChargeAmount('');
+            setChargeQty(1);
+        }
+    };
+
+    const removeStagedItem = (draftId) => {
+        setStagedItems(prev => prev.filter(item => item.id !== draftId));
+    };
+
+    const handleBatchSubmit = () => {
+        if (selectedUserId && selectedJobId && stagedItems.length > 0) {
+            addBatchInvoiceToJob(selectedUserId, selectedJobId, stagedItems);
+            setSuccessMsg(`Successfully billed ${stagedItems.length} items to this job.`);
+            setStagedItems([]);
+            setTimeout(() => setSuccessMsg(''), 4000);
+        }
+    };
+
+    const stagedTotal = stagedItems.reduce((acc, current) => acc + (current.amount * current.quantity), 0);
+    // ----------------------------------------
 
     // Calculate unweighted vs weighted totals for UI badge
     const tasks = selectedJob?.tasks || [];
@@ -279,117 +343,233 @@ const JobManager = () => {
                         </div>
                     </div>
 
-                    {/* Right Column: Job Summary */}
-                    <div className="glass-panel" style={{ padding: 'var(--sp-6)', height: 'fit-content' }}>
-                        <div className="widget-header" style={{ marginBottom: 'var(--sp-4)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <Clock size={20} color="var(--primary)" />
-                                <span style={{ color: '#fff' }}>Deploy Details</span>
-                            </div>
-                            <button
-                                onClick={() => setIsEditing(!isEditing)}
-                                style={{ background: 'none', border: 'none', color: '#00b3ff', cursor: 'pointer', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}
-                            >
-                                {isEditing ? 'Cancel Edit' : 'Edit Details'}
-                            </button>
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                            <div>
-                                <span className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>Company</span>
-                                <div style={{ color: '#fff', fontWeight: '500' }}>{selectedUser.company}</div>
-                            </div>
-
-                            {isEditing ? (
-                                <>
-                                    <div>
-                                        <span className="text-muted" style={{ fontSize: 'var(--text-sm)', display: 'block', marginBottom: '4px' }}>Requested By</span>
-                                        <input
-                                            type="text"
-                                            className="form-control"
-                                            style={{ padding: '6px', fontSize: '14px' }}
-                                            value={editRequestedBy}
-                                            onChange={(e) => setEditRequestedBy(e.target.value)}
-                                        />
-                                    </div>
-                                    <div>
-                                        <span className="text-muted" style={{ fontSize: 'var(--text-sm)', display: 'block', marginBottom: '4px' }}>Location</span>
-                                        <select
-                                            className="form-control"
-                                            style={{ padding: '6px', fontSize: '14px' }}
-                                            value={editLocation}
-                                            onChange={(e) => setEditLocation(e.target.value)}
-                                        >
-                                            {allSiteOptions.map((opt, i) => (
-                                                <option key={i} value={opt}>{opt}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <button
-                                        className="btn-primary"
-                                        style={{ padding: '8px', fontSize: '13px', marginTop: '4px' }}
-                                        onClick={handleSaveDetails}
-                                        disabled={isSavingDetails}
-                                    >
-                                        {isSavingDetails ? 'Saving...' : 'Save Details'}
-                                    </button>
-                                </>
-                            ) : (
-                                <>
-                                    {selectedJob.meta?.requested_by && (
-                                        <div>
-                                            <span className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>Requested By</span>
-                                            <div style={{ color: '#fff' }}>{selectedJob.meta.requested_by}</div>
-                                        </div>
-                                    )}
-                                    {selectedJob.meta?.location && (
-                                        <div>
-                                            <span className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>Location</span>
-                                            <div style={{ color: '#00b3ff' }}>{selectedJob.meta.location}</div>
-                                        </div>
-                                    )}
-                                </>
-                            )}
-                            <div>
-                                <span className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>Job Status</span>
-                                <div>
-                                    <span style={{
-                                        color: selectedJob.status === 'Completed' ? '#00ff64' : (selectedJob.status === 'Active' ? '#00b3ff' : 'var(--primary)'),
-                                        background: selectedJob.status === 'Completed' ? 'rgba(0,255,100,0.1)' : (selectedJob.status === 'Active' ? 'rgba(0,179,255,0.1)' : 'rgba(255,0,127,0.1)'),
-                                        padding: '4px 12px',
-                                        borderRadius: '12px',
-                                        fontSize: 'var(--text-sm)',
-                                        fontWeight: '500',
-                                        display: 'inline-block'
-                                    }}>
-                                        {selectedJob.status}
-                                    </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-6)' }}>
+                        {/* Right Column Top: Job Summary */}
+                        <div className="glass-panel" style={{ padding: 'var(--sp-6)', height: 'fit-content' }}>
+                            <div className="widget-header" style={{ marginBottom: 'var(--sp-4)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <Clock size={20} color="var(--primary)" />
+                                    <span style={{ color: '#fff' }}>Deploy Details</span>
                                 </div>
-                            </div>
-                            <div>
-                                <span className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>Timeline</span>
-                                <div style={{ color: '#fff' }}>{selectedJob.date}</div>
-                            </div>
-
-                            <hr style={{ borderColor: 'rgba(255,255,255,0.1)', margin: '8px 0' }} />
-
-                            <div>
-                                <span className="text-muted" style={{ fontSize: 'var(--text-sm)', display: 'block', marginBottom: '8px' }}>Internal Admin Notes</span>
-                                <textarea
-                                    className="form-control"
-                                    style={{ background: 'rgba(0,0,0,0.3)', minHeight: '100px', fontSize: '14px', marginBottom: '8px' }}
-                                    placeholder="Add private deployment notes here..."
-                                    value={adminNotes}
-                                    onChange={(e) => setAdminNotes(e.target.value)}
-                                ></textarea>
                                 <button
-                                    className="btn-secondary"
-                                    style={{ width: '100%', padding: '8px', fontSize: '13px' }}
-                                    onClick={handleSaveNotes}
-                                    disabled={isSavingNotes}
+                                    onClick={() => setIsEditing(!isEditing)}
+                                    style={{ background: 'none', border: 'none', color: '#00b3ff', cursor: 'pointer', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}
                                 >
-                                    {isSavingNotes ? 'Saving...' : 'Save Notes'}
+                                    {isEditing ? 'Cancel Edit' : 'Edit Details'}
                                 </button>
                             </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                <div>
+                                    <span className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>Company</span>
+                                    <div style={{ color: '#fff', fontWeight: '500' }}>{selectedUser.company}</div>
+                                </div>
+
+                                {isEditing ? (
+                                    <>
+                                        <div>
+                                            <span className="text-muted" style={{ fontSize: 'var(--text-sm)', display: 'block', marginBottom: '4px' }}>Requested By</span>
+                                            <input
+                                                type="text"
+                                                className="form-control"
+                                                style={{ padding: '6px', fontSize: '14px' }}
+                                                value={editRequestedBy}
+                                                onChange={(e) => setEditRequestedBy(e.target.value)}
+                                            />
+                                        </div>
+                                        <div>
+                                            <span className="text-muted" style={{ fontSize: 'var(--text-sm)', display: 'block', marginBottom: '4px' }}>Location</span>
+                                            <select
+                                                className="form-control"
+                                                style={{ padding: '6px', fontSize: '14px' }}
+                                                value={editLocation}
+                                                onChange={(e) => setEditLocation(e.target.value)}
+                                            >
+                                                {allSiteOptions.map((opt, i) => (
+                                                    <option key={i} value={opt}>{opt}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <button
+                                            className="btn-primary"
+                                            style={{ padding: '8px', fontSize: '13px', marginTop: '4px' }}
+                                            onClick={handleSaveDetails}
+                                            disabled={isSavingDetails}
+                                        >
+                                            {isSavingDetails ? 'Saving...' : 'Save Details'}
+                                        </button>
+                                    </>
+                                ) : (
+                                    <>
+                                        {selectedJob.meta?.requested_by && (
+                                            <div>
+                                                <span className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>Requested By</span>
+                                                <div style={{ color: '#fff' }}>{selectedJob.meta.requested_by}</div>
+                                            </div>
+                                        )}
+                                        {selectedJob.meta?.location && (
+                                            <div>
+                                                <span className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>Location</span>
+                                                <div style={{ color: '#00b3ff' }}>{selectedJob.meta.location}</div>
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+                                <div>
+                                    <span className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>Job Status</span>
+                                    <div>
+                                        <span style={{
+                                            color: selectedJob.status === 'Completed' ? '#00ff64' : (selectedJob.status === 'Active' ? '#00b3ff' : 'var(--primary)'),
+                                            background: selectedJob.status === 'Completed' ? 'rgba(0,255,100,0.1)' : (selectedJob.status === 'Active' ? 'rgba(0,179,255,0.1)' : 'rgba(255,0,127,0.1)'),
+                                            padding: '4px 12px',
+                                            borderRadius: '12px',
+                                            fontSize: 'var(--text-sm)',
+                                            fontWeight: '500',
+                                            display: 'inline-block'
+                                        }}>
+                                            {selectedJob.status}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <span className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>Timeline</span>
+                                    <div style={{ color: '#fff' }}>{selectedJob.date}</div>
+                                </div>
+
+                                <hr style={{ borderColor: 'rgba(255,255,255,0.1)', margin: '8px 0' }} />
+
+                                <div>
+                                    <span className="text-muted" style={{ fontSize: 'var(--text-sm)', display: 'block', marginBottom: '8px' }}>Internal Admin Notes</span>
+                                    <textarea
+                                        className="form-control"
+                                        style={{ background: 'rgba(0,0,0,0.3)', minHeight: '100px', fontSize: '14px', marginBottom: '8px' }}
+                                        placeholder="Add private deployment notes here..."
+                                        value={adminNotes}
+                                        onChange={(e) => setAdminNotes(e.target.value)}
+                                    ></textarea>
+                                    <button
+                                        className="btn-secondary"
+                                        style={{ width: '100%', padding: '8px', fontSize: '13px' }}
+                                        onClick={handleSaveNotes}
+                                        disabled={isSavingNotes}
+                                    >
+                                        {isSavingNotes ? 'Saving...' : 'Save Notes'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Right Column Bottom: Invoice Builder */}
+                        <div className="glass-panel widget" style={{ borderTop: '2px solid rgba(0, 240, 255, 0.5)' }}>
+                            <div className="widget-header">
+                                <DollarSign size={20} color="var(--primary)" />
+                                <span style={{ color: '#fff' }}>Stage Job Billing</span>
+                            </div>
+
+                            <form onSubmit={handleAddStagedItem} style={{ marginTop: 'var(--sp-4)' }}>
+                                <div className="form-group">
+                                    <label className="form-label">Select Pre-Priced Item (Optional)</label>
+                                    <select
+                                        className="form-control"
+                                        style={{ appearance: 'none' }}
+                                        value={selectedCatalogId}
+                                        onChange={handleCatalogSelect}
+                                    >
+                                        <option value="">-- Choose from Catalog --</option>
+                                        {billingCatalog.map(item => (
+                                            <option key={item.id} value={item.id}>{item.description} - ${item.defaultPrice}</option>
+                                        ))}
+                                        <option value="custom">-- Custom Entry --</option>
+                                    </select>
+                                </div>
+
+                                <div className="form-group">
+                                    <label className="form-label">Line Item Description</label>
+                                    <input
+                                        type="text"
+                                        className="form-control"
+                                        placeholder="Hardware / Labor description..."
+                                        value={chargeDesc}
+                                        onChange={(e) => setChargeDesc(e.target.value)}
+                                        required
+                                    />
+                                </div>
+
+                                <div style={{ display: 'flex', gap: 'var(--sp-4)' }}>
+                                    <div className="form-group" style={{ flex: 1 }}>
+                                        <label className="form-label">Unit Price (USD)</label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            className="form-control"
+                                            placeholder="00.00"
+                                            value={chargeAmount}
+                                            onChange={(e) => setChargeAmount(e.target.value)}
+                                            required
+                                        />
+                                    </div>
+                                    <div className="form-group" style={{ width: '100px' }}>
+                                        <label className="form-label">Quantity</label>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            step="1"
+                                            className="form-control"
+                                            value={chargeQty}
+                                            onChange={(e) => setChargeQty(e.target.value)}
+                                            required
+                                        />
+                                    </div>
+                                </div>
+
+                                <button type="submit" className="btn-secondary" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                                    <PlusCircle size={18} /> Add To Staged Invoice
+                                </button>
+                            </form>
+
+                            {/* Pending Staged Invoice List */}
+                            {stagedItems.length > 0 && (
+                                <div style={{ marginTop: 'var(--sp-6)', background: 'rgba(255, 0, 127, 0.05)', padding: 'var(--sp-4)', borderRadius: '8px', border: '1px solid rgba(255, 0, 127, 0.2)' }}>
+                                    <div style={{ paddingBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.1)', marginBottom: '8px' }}>
+                                        <span style={{ color: '#fff', fontWeight: 'bold' }}>Review & Submit Invoice</span>
+                                    </div>
+
+                                    <div style={{ maxHeight: '200px', overflowY: 'auto', marginBottom: 'var(--sp-4)' }}>
+                                        <table style={{ width: '100%', fontSize: '0.85rem' }}>
+                                            <tbody>
+                                                {stagedItems.map(item => (
+                                                    <tr key={item.id} style={{ borderBottom: '1px dashed rgba(255,255,255,0.1)' }}>
+                                                        <td style={{ padding: '8px 4px', color: '#e0e0e0', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                            {item.quantity}x {item.description}
+                                                        </td>
+                                                        <td style={{ padding: '8px 4px', textAlign: 'right', color: '#fff', width: '70px' }}>
+                                                            ${(item.amount * item.quantity).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                                        </td>
+                                                        <td style={{ padding: '8px 4px', width: '30px', textAlign: 'right' }}>
+                                                            <button
+                                                                onClick={() => removeStagedItem(item.id)}
+                                                                style={{ background: 'none', border: 'none', color: '#ff4444', cursor: 'pointer', padding: '4px' }}
+                                                            >
+                                                                <Trash2 size={16} />
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--sp-4)', fontWeight: 'bold' }}>
+                                        <span style={{ color: 'var(--text-muted)' }}>Staged Subtotal:</span>
+                                        <span style={{ color: '#ff007f', fontSize: '1.1rem' }}>${stagedTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                                    </div>
+
+                                    <button onClick={handleBatchSubmit} className="btn-primary" style={{ width: '100%', background: 'linear-gradient(135deg, #ff007f, #7000ff)' }}>
+                                        Commit Invoice Payload
+                                    </button>
+                                </div>
+                            )}
+
+                            {successMsg && <div style={{ marginTop: '12px', color: '#00ff64', fontSize: '0.875rem', textAlign: 'center', padding: '8px', background: 'rgba(0, 255, 100, 0.1)', borderRadius: '8px' }}>{successMsg}</div>}
                         </div>
                     </div>
 

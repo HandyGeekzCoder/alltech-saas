@@ -10,13 +10,15 @@ const SitesManager = () => {
     const [isAdding, setIsAdding] = useState(false);
     const [companyName, setCompanyName] = useState('');
     const [location, setLocation] = useState('');
+    const [taxRate, setTaxRate] = useState('');
 
     const handleAddSite = async (e) => {
         e.preventDefault();
         if (companyName && location) {
-            await addSiteToAccount(loggedInUser.id, companyName, location);
+            await addSiteToAccount(loggedInUser.id, companyName, location, taxRate || 0);
             setCompanyName('');
             setLocation('');
+            setTaxRate('');
             setIsAdding(false);
         }
     };
@@ -68,6 +70,18 @@ const SitesManager = () => {
                                     required
                                 />
                             </div>
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                                <label className="form-label">Sales Tax % (Optional)</label>
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    className="form-control"
+                                    placeholder="e.g. 8.25"
+                                    value={taxRate}
+                                    onChange={(e) => setTaxRate(e.target.value)}
+                                />
+                            </div>
                             <div style={{ display: 'flex', gap: 'var(--sp-4)', marginTop: 'var(--sp-2)' }}>
                                 <button type="submit" className="btn-primary" style={{ flex: 1 }}>Save Site</button>
                                 <button type="button" className="btn-secondary" style={{ flex: 1 }} onClick={() => setIsAdding(false)}>Cancel</button>
@@ -106,6 +120,11 @@ const SitesManager = () => {
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
                                         <MapPin size={14} />
                                         {site.location}
+                                        {site.taxRate > 0 && (
+                                            <span style={{ marginLeft: '8px', background: 'rgba(255,165,0,0.1)', color: 'orange', padding: '2px 6px', borderRadius: '4px', fontSize: '0.75rem' }}>
+                                                Tax: {site.taxRate}%
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
                                 <button
