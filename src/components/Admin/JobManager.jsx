@@ -415,9 +415,12 @@ const JobManager = () => {
                                                 value={editLocation}
                                                 onChange={(e) => setEditLocation(e.target.value)}
                                             >
-                                                {allSiteOptions.map((opt, i) => (
+                                                {realSelectedUser ? [
+                                                    `${realSelectedUser.company} (Primary HQ)`,
+                                                    ...(realSelectedUser.sites || []).map(s => `${s.companyName} - ${s.location}`)
+                                                ].map((opt, i) => (
                                                     <option key={i} value={opt}>{opt}</option>
-                                                ))}
+                                                )) : null}
                                             </select>
                                         </div>
                                         <button
