@@ -10,6 +10,9 @@ const JobRequest = () => {
 
     // Permission checks
     const isEmployee = !!loggedInUser?.parentClientId;
+    const parentUser = isEmployee ? users.find(u => u.id === loggedInUser.parentClientId) : null;
+    const rootCompanyName = isEmployee ? parentUser?.company : loggedInUser?.company;
+
     const canRequestJobs = !isEmployee || loggedInUser?.permissions?.canRequestJobs;
     const allowedSitesIds = loggedInUser?.permissions?.allowedSites || [];
 
@@ -24,7 +27,7 @@ const JobRequest = () => {
 
     // Default location
     const defaultLocation = canSelectPrimaryHQ
-        ? `${loggedInUser?.company} (Primary HQ)`
+        ? `${rootCompanyName} (Primary HQ)`
         : (sites.length > 0 ? `${sites[0].companyName} - ${sites[0].location}` : '');
 
     const [location, setLocation] = useState(defaultLocation);
@@ -132,8 +135,8 @@ const JobRequest = () => {
                             onChange={(e) => setLocation(e.target.value)}
                         >
                             {canSelectPrimaryHQ && (
-                                <option value={`${loggedInUser?.company} (Primary HQ)`}>
-                                    {loggedInUser?.company} (Primary HQ)
+                                <option value={`${rootCompanyName} (Primary HQ)`}>
+                                    {rootCompanyName} (Primary HQ)
                                 </option>
                             )}
                             {sites.map(site => (

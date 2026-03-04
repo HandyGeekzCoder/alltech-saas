@@ -108,7 +108,27 @@ export const AdminProvider = ({ children }) => {
 
                     // Get Jobs for Profile
                     const { data: jobsRes } = await supabase.from('jobs').select('*').eq('user_id', targetProfileId);
-                    const jobsList = jobsRes || [];
+                    let jobsList = jobsRes || [];
+
+                    // ---------------- Employee Job Sandboxing ----------------
+                    if (profile.parent_client_id) {
+                        const allowedIds = profile.permissions?.allowedSites || [];
+                        const canSeePrimary = allowedIds.includes('primary-hq');
+
+                        const parentProfile = profilesRes.find(p => p.id === profile.parent_client_id);
+                        const primaryHQLabel = `${parentProfile?.company} (Primary HQ)`;
+
+                        const allowedSiteLabels = sitesList
+                            .filter(s => allowedIds.includes(s.id))
+                            .map(s => `${s.company_name} - ${s.location}`);
+
+                        const allowedLocations = [...allowedSiteLabels];
+                        if (canSeePrimary) allowedLocations.push(primaryHQLabel);
+
+                        // Strictly filter out any jobs not matching allowed locations
+                        jobsList = jobsList.filter(job => allowedLocations.includes(job.meta?.location));
+                    }
+                    // ---------------------------------------------------------
 
                     // Hydrate Jobs
                     const hydratedJobs = await Promise.all(jobsList.map(async (job) => {
@@ -503,6 +523,31 @@ export const AdminProvider = ({ children }) => {
         await supabase.from('jobs').update({ meta: { ...currentMeta, adminNotes: notes } }).eq('id', jobId);
     };
 
+    const updateJobDetails = async (userId, jobId, newLocation, newRequestedBy) => {
+        // UI Optimistic Update
+        setUsers(prev => prev.map(user => {
+            if (user.id === userId) {
+                return {
+                    ...user,
+                    jobs: user.jobs.map(job =>
+                        job.id === jobId ? {
+                            ...job,
+                            meta: { ...job.meta, location: newLocation, requested_by: newRequestedBy }
+                        } : job
+                    )
+                };
+            }
+            return user;
+        }));
+
+        // Fetch existing meta first
+        const { data: jobData } = await supabase.from('jobs').select('meta').eq('id', jobId).single();
+        const currentMeta = jobData?.meta || {};
+
+        // Push merged JSONB to DB
+        await supabase.from('jobs').update({ meta: { ...currentMeta, location: newLocation, requested_by: newRequestedBy } }).eq('id', jobId);
+    };
+
     const addBatchInvoiceToJob = async (userId, jobId, itemsArray) => {
         const newCatalogAdditions = [];
 
@@ -696,7 +741,7 @@ export const AdminProvider = ({ children }) => {
             billingCatalog, addBatchInvoiceToJob,
             addCatalogItem, updateCatalogItem, deleteCatalogItem,
             addTaskToJob, toggleTaskCompletion, deleteTaskFromJob,
-            addClientAccount, updateClientPassword, addJobToAccount, updateJobNotes,
+            addClientAccount, updateClientPassword, addJobToAccount, updateJobNotes, updateJobDetails,
             addSiteToAccount, deleteSiteFromAccount, addEmployeeToClient,
             isLoading
         }}>

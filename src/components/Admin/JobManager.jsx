@@ -3,7 +3,7 @@ import { AdminContext } from '../../AdminContext';
 import { Target, CheckCircle2, Circle, Trash2, PlusCircle, ServerCog, Activity, Clock } from 'lucide-react';
 
 const JobManager = () => {
-    const { users, addTaskToJob, toggleTaskCompletion, deleteTaskFromJob, updateJobNotes } = useContext(AdminContext);
+    const { users, addTaskToJob, toggleTaskCompletion, deleteTaskFromJob, updateJobNotes, updateJobDetails } = useContext(AdminContext);
 
     // Filter out users who have at least one job AND are not sub-employees
     const usersWithJobs = users.filter(user => !user.parentClientId && user.jobs && user.jobs.length > 0);
@@ -40,8 +40,13 @@ const JobManager = () => {
         }
     };
 
-    // Derived context
     const selectedUser = users.find(u => u.id === selectedUserId);
+
+    // Build options for edit dropdown (Primary HQ + Sites)
+    const allSiteOptions = selectedUser ? [
+        `${selectedUser.company} (Primary HQ)`,
+        ...(selectedUser.sites || []).map(s => `${s.companyName} - ${s.location}`)
+    ] : [];
 
     // Extract unique sites from this user's jobs
     const availableSites = selectedUser ? [...new Set(selectedUser.jobs.map(j => j.meta?.location).filter(Boolean))] : [];
@@ -54,11 +59,27 @@ const JobManager = () => {
     const [adminNotes, setAdminNotes] = useState('');
     const [isSavingNotes, setIsSavingNotes] = useState(false);
 
+    const [isEditing, setIsEditing] = useState(false);
+    const [editLocation, setEditLocation] = useState('');
+    const [editRequestedBy, setEditRequestedBy] = useState('');
+    const [isSavingDetails, setIsSavingDetails] = useState(false);
+
     React.useEffect(() => {
         if (selectedJob) {
             setAdminNotes(selectedJob.meta?.adminNotes || '');
+            setIsEditing(false);
+            setEditLocation(selectedJob.meta?.location || '');
+            setEditRequestedBy(selectedJob.meta?.requested_by || '');
         }
     }, [selectedJobId]);
+
+    const handleSaveDetails = async () => {
+        if (!selectedJob) return;
+        setIsSavingDetails(true);
+        await updateJobDetails(selectedUserId, selectedJobId, editLocation, editRequestedBy);
+        setIsSavingDetails(false);
+        setIsEditing(false);
+    };
 
     const handleSaveNotes = async () => {
         if (!selectedJob) return;
@@ -260,26 +281,73 @@ const JobManager = () => {
 
                     {/* Right Column: Job Summary */}
                     <div className="glass-panel" style={{ padding: 'var(--sp-6)', height: 'fit-content' }}>
-                        <div className="widget-header" style={{ marginBottom: 'var(--sp-4)' }}>
-                            <Clock size={20} color="var(--primary)" />
-                            <span style={{ color: '#fff' }}>Deploy Details</span>
+                        <div className="widget-header" style={{ marginBottom: 'var(--sp-4)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Clock size={20} color="var(--primary)" />
+                                <span style={{ color: '#fff' }}>Deploy Details</span>
+                            </div>
+                            <button
+                                onClick={() => setIsEditing(!isEditing)}
+                                style={{ background: 'none', border: 'none', color: '#00b3ff', cursor: 'pointer', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                            >
+                                {isEditing ? 'Cancel Edit' : 'Edit Details'}
+                            </button>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                             <div>
                                 <span className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>Company</span>
                                 <div style={{ color: '#fff', fontWeight: '500' }}>{selectedUser.company}</div>
                             </div>
-                            {selectedJob.meta?.requested_by && (
-                                <div>
-                                    <span className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>Requested By</span>
-                                    <div style={{ color: '#fff' }}>{selectedJob.meta.requested_by}</div>
-                                </div>
-                            )}
-                            {selectedJob.meta?.location && (
-                                <div>
-                                    <span className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>Location</span>
-                                    <div style={{ color: '#00b3ff' }}>{selectedJob.meta.location}</div>
-                                </div>
+
+                            {isEditing ? (
+                                <>
+                                    <div>
+                                        <span className="text-muted" style={{ fontSize: 'var(--text-sm)', display: 'block', marginBottom: '4px' }}>Requested By</span>
+                                        <input
+                                            type="text"
+                                            className="form-control"
+                                            style={{ padding: '6px', fontSize: '14px' }}
+                                            value={editRequestedBy}
+                                            onChange={(e) => setEditRequestedBy(e.target.value)}
+                                        />
+                                    </div>
+                                    <div>
+                                        <span className="text-muted" style={{ fontSize: 'var(--text-sm)', display: 'block', marginBottom: '4px' }}>Location</span>
+                                        <select
+                                            className="form-control"
+                                            style={{ padding: '6px', fontSize: '14px' }}
+                                            value={editLocation}
+                                            onChange={(e) => setEditLocation(e.target.value)}
+                                        >
+                                            {allSiteOptions.map((opt, i) => (
+                                                <option key={i} value={opt}>{opt}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <button
+                                        className="btn-primary"
+                                        style={{ padding: '8px', fontSize: '13px', marginTop: '4px' }}
+                                        onClick={handleSaveDetails}
+                                        disabled={isSavingDetails}
+                                    >
+                                        {isSavingDetails ? 'Saving...' : 'Save Details'}
+                                    </button>
+                                </>
+                            ) : (
+                                <>
+                                    {selectedJob.meta?.requested_by && (
+                                        <div>
+                                            <span className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>Requested By</span>
+                                            <div style={{ color: '#fff' }}>{selectedJob.meta.requested_by}</div>
+                                        </div>
+                                    )}
+                                    {selectedJob.meta?.location && (
+                                        <div>
+                                            <span className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>Location</span>
+                                            <div style={{ color: '#00b3ff' }}>{selectedJob.meta.location}</div>
+                                        </div>
+                                    )}
+                                </>
                             )}
                             <div>
                                 <span className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>Job Status</span>
