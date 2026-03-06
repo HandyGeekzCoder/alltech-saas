@@ -3,7 +3,7 @@ import { AdminContext } from '../../AdminContext';
 import { Target, CheckCircle2, Circle, Trash2, PlusCircle, ServerCog, Activity, Clock, DollarSign, Printer } from 'lucide-react';
 
 const JobManager = () => {
-    const { users, addTaskToJob, toggleTaskCompletion, deleteTaskFromJob, updateJobNotes, updateJobDetails, billingCatalog, addBatchInvoiceToJob } = useContext(AdminContext);
+    const { users, addTaskToJob, toggleTaskCompletion, deleteTaskFromJob, updateJobNotes, updateJobDetails, updateJobStatus, billingCatalog, addBatchInvoiceToJob } = useContext(AdminContext);
 
     const usersWithJobs = users.filter(user => !user.parentClientId && user.jobs && user.jobs.length > 0);
 
@@ -85,6 +85,7 @@ const JobManager = () => {
     const [isEditing, setIsEditing] = useState(false);
     const [editLocation, setEditLocation] = useState('');
     const [editRequestedBy, setEditRequestedBy] = useState('');
+    const [editStatus, setEditStatus] = useState('');
     const [isSavingDetails, setIsSavingDetails] = useState(false);
 
     React.useEffect(() => {
@@ -93,6 +94,7 @@ const JobManager = () => {
             setIsEditing(false);
             setEditLocation(selectedJob.meta?.location || '');
             setEditRequestedBy(selectedJob.meta?.requested_by || '');
+            setEditStatus(selectedJob.status || 'Active');
         }
     }, [selectedJobId]);
 
@@ -100,6 +102,10 @@ const JobManager = () => {
         if (!selectedJob) return;
         setIsSavingDetails(true);
         await updateJobDetails(activeJobUserId, selectedJobId, editLocation, editRequestedBy);
+        // Only trigger status update if it actually changed
+        if (editStatus !== selectedJob.status) {
+            await updateJobStatus(activeJobUserId, selectedJobId, editStatus);
+        }
         setIsSavingDetails(false);
         setIsEditing(false);
     };
@@ -447,6 +453,20 @@ const JobManager = () => {
                                                 )) : null}
                                             </select>
                                         </div>
+                                        <div>
+                                            <span className="text-muted" style={{ fontSize: 'var(--text-sm)', display: 'block', marginBottom: '4px' }}>Job Status</span>
+                                            <select
+                                                className="form-control"
+                                                style={{ padding: '6px', fontSize: '14px' }}
+                                                value={editStatus}
+                                                onChange={(e) => setEditStatus(e.target.value)}
+                                            >
+                                                <option value="Pending Review">Pending Review</option>
+                                                <option value="Active">Active</option>
+                                                <option value="Completed">Completed</option>
+                                                <option value="Paid">Paid</option>
+                                            </select>
+                                        </div>
                                         <button
                                             className="btn-primary"
                                             style={{ padding: '8px', fontSize: '13px', marginTop: '4px' }}
@@ -472,22 +492,24 @@ const JobManager = () => {
                                         )}
                                     </>
                                 )}
-                                <div>
-                                    <span className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>Job Status</span>
+                                {isEditing ? null : (
                                     <div>
-                                        <span style={{
-                                            color: selectedJob.status === 'Completed' ? '#00ff64' : (selectedJob.status === 'Active' ? '#00b3ff' : 'var(--primary)'),
-                                            background: selectedJob.status === 'Completed' ? 'rgba(0,255,100,0.1)' : (selectedJob.status === 'Active' ? 'rgba(0,179,255,0.1)' : 'rgba(255,0,127,0.1)'),
-                                            padding: '4px 12px',
-                                            borderRadius: '12px',
-                                            fontSize: 'var(--text-sm)',
-                                            fontWeight: '500',
-                                            display: 'inline-block'
-                                        }}>
-                                            {selectedJob.status}
-                                        </span>
+                                        <span className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>Job Status</span>
+                                        <div>
+                                            <span style={{
+                                                color: selectedJob.status === 'Completed' || selectedJob.status === 'Paid' ? '#00ff64' : (selectedJob.status === 'Active' ? '#00b3ff' : 'var(--primary)'),
+                                                background: selectedJob.status === 'Completed' || selectedJob.status === 'Paid' ? 'rgba(0,255,100,0.1)' : (selectedJob.status === 'Active' ? 'rgba(0,179,255,0.1)' : 'rgba(255,0,127,0.1)'),
+                                                padding: '4px 12px',
+                                                borderRadius: '12px',
+                                                fontSize: 'var(--text-sm)',
+                                                fontWeight: '500',
+                                                display: 'inline-block'
+                                            }}>
+                                                {selectedJob.status}
+                                            </span>
+                                        </div>
                                     </div>
-                                </div>
+                                )}
                                 <div>
                                     <span className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>Timeline</span>
                                     <div style={{ color: '#fff' }}>{selectedJob.date}</div>

@@ -578,6 +578,24 @@ export const AdminProvider = ({ children }) => {
         await supabase.from('jobs').update({ meta: { ...currentMeta, location: newLocation, requested_by: newRequestedBy } }).eq('id', jobId);
     };
 
+    const updateJobStatus = async (userId, jobId, newStatus) => {
+        // UI Optimistic Update
+        setUsers(prev => prev.map(user => {
+            if (user.id === userId) {
+                return {
+                    ...user,
+                    jobs: user.jobs.map(job =>
+                        job.id === jobId ? { ...job, status: newStatus } : job
+                    )
+                };
+            }
+            return user;
+        }));
+
+        // DB Update
+        await supabase.from('jobs').update({ status: newStatus }).eq('id', jobId);
+    };
+
     const addBatchInvoiceToJob = async (userId, jobId, itemsArray) => {
         const newCatalogAdditions = [];
 
@@ -805,7 +823,7 @@ export const AdminProvider = ({ children }) => {
             loggedInUserId, loginClient, adminLogin,
             billingCatalog, addBatchInvoiceToJob,
             addCatalogItem, updateCatalogItem, deleteCatalogItem,
-            addTaskToJob, toggleTaskCompletion, deleteTaskFromJob,
+            addTaskToJob, toggleTaskCompletion, deleteTaskFromJob, updateJobStatus,
             addClientAccount, updateClientPassword, addJobToAccount, updateJobNotes, updateJobDetails,
             addSiteToAccount, deleteSiteFromAccount, updateSiteDetails, addEmployeeToClient,
             isLoading
