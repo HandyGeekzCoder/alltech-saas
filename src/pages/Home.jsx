@@ -1,4 +1,4 @@
-import React, { useContext } from 'react';
+import React, { useContext, useState, useEffect } from 'react';
 import { ArrowRight, Shield, Video, Wifi, MonitorSmartphone } from 'lucide-react';
 import { AdminContext } from '../AdminContext';
 
@@ -6,10 +6,27 @@ const Home = () => {
     const { siteData } = useContext(AdminContext);
     const heroContent = siteData.hero;
 
+    const [mousePos, setMousePos] = useState({ x: -1000, y: -1000 });
+
+    useEffect(() => {
+        const handleMouseMove = (e) => {
+            requestAnimationFrame(() => {
+                setMousePos({ x: e.pageX, y: e.pageY });
+            });
+        };
+
+        window.addEventListener('mousemove', handleMouseMove, { passive: true });
+        return () => window.removeEventListener('mousemove', handleMouseMove);
+    }, []);
+
     return (
-        <div>
+        <div style={{ '--mouse-x': `${mousePos.x}px`, '--mouse-y': `${mousePos.y}px` }}>
             {/* Background Animated Tech Grid */}
-            <div className="tech-grid-bg"></div>
+            <div className="tech-grid-wrapper">
+                <div className="tech-grid-bg"></div>
+                <div className="tech-grid-mid"></div>
+                <div className="tech-grid-peak"></div>
+            </div>
 
             {/* Spacer for fixed Navbar */}
             <div className="navbar-spacer"></div>

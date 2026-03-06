@@ -178,22 +178,66 @@ img {
 }
 
 /* Animated Tech Background */
-.tech-grid-bg {
+.tech-grid-wrapper {
     position: absolute;
     top: 0;
     left: 0;
     width: 100vw;
     height: 100%;
     z-index: -1;
+    overflow: hidden;
+    mask-image: linear-gradient(to bottom, transparent, black 10%, black 70%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to bottom, transparent, black 10%, black 70%, transparent 100%);
+    pointer-events: none;
+}
+
+.tech-grid-bg,
+.tech-grid-mid,
+.tech-grid-peak {
+    position: absolute;
+    transform-origin: center;
+}
+
+.tech-grid-bg {
+    top: -50px;
+    left: -50px;
+    width: calc(100vw + 100px);
+    height: calc(100% + 100px);
     background-image:
         linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
         linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
     background-size: 50px 50px;
-    perspective: 1000px;
-    transform-origin: top center;
     animation: gridMove 20s linear infinite;
-    mask-image: linear-gradient(to bottom, transparent, black 10%, black 70%, transparent 100%);
-    -webkit-mask-image: linear-gradient(to bottom, transparent, black 10%, black 70%, transparent 100%);
+}
+
+.tech-grid-mid {
+    top: -55px;
+    left: -55px;
+    width: calc(100vw + 110px);
+    height: calc(100% + 110px);
+    background-image:
+        linear-gradient(rgba(0, 240, 255, 0.2) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 240, 255, 0.2) 1px, transparent 1px);
+    background-size: 55px 55px;
+    animation: gridMoveMid 22s linear infinite;
+    mask-image: radial-gradient(circle 350px at var(--mouse-x, -1000px) var(--mouse-y, -1000px), black 0%, transparent 100%);
+    -webkit-mask-image: radial-gradient(circle 350px at var(--mouse-x, -1000px) var(--mouse-y, -1000px), black 0%, transparent 100%);
+    filter: drop-shadow(0 0 10px rgba(0, 240, 255, 0.2));
+}
+
+.tech-grid-peak {
+    top: -60px;
+    left: -60px;
+    width: calc(100vw + 120px);
+    height: calc(100% + 120px);
+    background-image:
+        linear-gradient(rgba(255, 0, 127, 0.35) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 0, 127, 0.35) 1px, transparent 1px);
+    background-size: 60px 60px;
+    animation: gridMovePeak 24s linear infinite;
+    mask-image: radial-gradient(circle 150px at var(--mouse-x, -1000px) var(--mouse-y, -1000px), black 0%, transparent 100%);
+    -webkit-mask-image: radial-gradient(circle 150px at var(--mouse-x, -1000px) var(--mouse-y, -1000px), black 0%, transparent 100%);
+    filter: drop-shadow(0 0 15px rgba(255, 0, 127, 0.4));
 }
 
 @keyframes gridMove {
@@ -203,6 +247,26 @@ img {
 
     100% {
         transform: translateY(50px);
+    }
+}
+
+@keyframes gridMoveMid {
+    0% {
+        transform: translateY(0);
+    }
+
+    100% {
+        transform: translateY(55px);
+    }
+}
+
+@keyframes gridMovePeak {
+    0% {
+        transform: translateY(0);
+    }
+
+    100% {
+        transform: translateY(60px);
     }
 }
 
