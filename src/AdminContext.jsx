@@ -63,6 +63,7 @@ export const AdminProvider = ({ children }) => {
     const [siteData, setSiteData] = useState(defaultSiteData);
     const [users, setUsers] = useState([]);
     const [billingCatalog, setBillingCatalog] = useState([]);
+    const [taskCatalog, setTaskCatalog] = useState([]);
     const [loggedInUserId, setLoggedInUserId] = useState(() => {
         const saved = localStorage.getItem('alltech_cms_loggedInId');
         return saved ? saved : null;
@@ -84,13 +85,23 @@ export const AdminProvider = ({ children }) => {
                 setSiteData(parsedData);
             }
 
-            // 2. Fetch catalog
+            // 2. Fetch billing catalog
             const { data: catRes } = await supabase.from('catalog').select('*');
             if (catRes) {
                 setBillingCatalog(catRes.map(c => ({
                     id: c.id,
                     description: c.description,
                     defaultPrice: Number(c.default_price)
+                })));
+            }
+
+            // 2.5 Fetch task catalog
+            const { data: taskCatRes } = await supabase.from('task_catalog').select('*');
+            if (taskCatRes) {
+                setTaskCatalog(taskCatRes.map(c => ({
+                    id: c.id,
+                    description: c.description,
+                    defaultWeight: c.default_weight !== null ? Number(c.default_weight) : null
                 })));
             }
 
@@ -709,17 +720,56 @@ export const AdminProvider = ({ children }) => {
         setBillingCatalog(prev => prev.filter(item => item.id !== id));
     };
 
-    const addTaskToJob = async (userId, jobId, title, customWeight = null) => {
-        const uid = `tsk_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        const newTaskForDB = {
-            id: uid,
-            job_id: jobId,
-            title,
-            is_completed: false,
-            weight: customWeight ? parseFloat(customWeight) : null
+    const addTaskCatalogItem = async (description, defaultWeight) => {
+        const newItem = {
+            id: `tcat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            description,
+            default_weight: defaultWeight !== '' && defaultWeight !== null ? parseFloat(defaultWeight) : null
         };
+        await supabase.from('task_catalog').insert(newItem);
+        setTaskCatalog(prev => [{ ...newItem, defaultWeight: newItem.default_weight }, ...prev]);
+    };
 
-        await supabase.from('tasks').insert(newTaskForDB);
+    const updateTaskCatalogItem = async (id, description, defaultWeight) => {
+        const parsedWeight = defaultWeight !== '' && defaultWeight !== null ? parseFloat(defaultWeight) : null;
+        await supabase.from('task_catalog').update({ description, default_weight: parsedWeight }).eq('id', id);
+        setTaskCatalog(prev => prev.map(item =>
+            item.id === id ? { ...item, description, defaultWeight: parsedWeight } : item
+        ));
+    };
+
+    const deleteTaskCatalogItem = async (id) => {
+        await supabase.from('task_catalog').delete().eq('id', id);
+        setTaskCatalog(prev => prev.filter(item => item.id !== id));
+    };
+
+    const addTaskToJob = async (userId, jobId, title, customWeight = null, quantity = 1) => {
+        const q = parseInt(quantity, 10) || 1;
+        const newTasksForDB = [];
+        const newTasksForUI = [];
+
+        for (let i = 0; i < q; i++) {
+            const uid = `tsk_${Date.now()}_${i}_${Math.random().toString(36).substr(2, 9)}`;
+            const taskTitle = q > 1 ? `${title} ${i + 1}/${q}` : title;
+            const parsedWeight = customWeight ? parseFloat(customWeight) : null;
+
+            newTasksForDB.push({
+                id: uid,
+                job_id: jobId,
+                title: taskTitle,
+                is_completed: false,
+                weight: parsedWeight
+            });
+
+            newTasksForUI.push({
+                id: uid,
+                title: taskTitle,
+                isCompleted: false,
+                weight: parsedWeight
+            });
+        }
+
+        await supabase.from('tasks').insert(newTasksForDB);
 
         setUsers(prev => prev.map(user => {
             if (user.id === userId) {
@@ -727,12 +777,7 @@ export const AdminProvider = ({ children }) => {
                     if (job.id === jobId) {
                         const newTasks = [
                             ...(job.tasks || []),
-                            {
-                                id: uid,
-                                title,
-                                isCompleted: false,
-                                weight: newTaskForDB.weight
-                            }
+                            ...newTasksForUI
                         ];
                         // Recalculate progress
                         const newProgress = calculateJobProgress(newTasks);
@@ -822,6 +867,7 @@ export const AdminProvider = ({ children }) => {
             users, addLineItemToJob,
             loggedInUserId, loginClient, adminLogin,
             billingCatalog, addBatchInvoiceToJob,
+            taskCatalog, addTaskCatalogItem, updateTaskCatalogItem, deleteTaskCatalogItem,
             addCatalogItem, updateCatalogItem, deleteCatalogItem,
             addTaskToJob, toggleTaskCompletion, deleteTaskFromJob, updateJobStatus,
             addClientAccount, updateClientPassword, addJobToAccount, updateJobNotes, updateJobDetails,

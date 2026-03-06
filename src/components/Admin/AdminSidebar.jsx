@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, Link } from 'react-router-dom';
-import { Cpu, Edit, Users, LogOut, BookOpen, Target } from 'lucide-react';
+import { Cpu, Edit, Users, LogOut, BookOpen, Target, ListTodo } from 'lucide-react';
 
 const AdminSidebar = () => {
     return (
@@ -51,7 +51,17 @@ const AdminSidebar = () => {
                             style={({ isActive }) => isActive ? { color: '#ff007f', borderLeftColor: '#ff007f', background: 'rgba(255,0,127,0.05)' } : {}}
                         >
                             <BookOpen size={20} />
-                            Catalog Manager
+                            Billing Catalog
+                        </NavLink>
+                    </li>
+                    <li>
+                        <NavLink
+                            to="/admin/tasks"
+                            className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}
+                            style={({ isActive }) => isActive ? { color: '#00b3ff', borderLeftColor: '#00b3ff', background: 'rgba(0,179,255,0.05)' } : {}}
+                        >
+                            <ListTodo size={20} />
+                            Task Catalog
                         </NavLink>
                     </li>
                 </ul>

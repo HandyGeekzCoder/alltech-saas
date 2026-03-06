@@ -3,7 +3,7 @@ import { AdminContext } from '../../AdminContext';
 import { Target, CheckCircle2, Circle, Trash2, PlusCircle, ServerCog, Activity, Clock, DollarSign, Printer } from 'lucide-react';
 
 const JobManager = () => {
-    const { users, addTaskToJob, toggleTaskCompletion, deleteTaskFromJob, updateJobNotes, updateJobDetails, updateJobStatus, billingCatalog, addBatchInvoiceToJob } = useContext(AdminContext);
+    const { users, addTaskToJob, toggleTaskCompletion, deleteTaskFromJob, updateJobNotes, updateJobDetails, updateJobStatus, billingCatalog, taskCatalog, addBatchInvoiceToJob } = useContext(AdminContext);
 
     const usersWithJobs = users.filter(user => !user.parentClientId && user.jobs && user.jobs.length > 0);
 
@@ -95,6 +95,10 @@ const JobManager = () => {
             setEditLocation(selectedJob.meta?.location || '');
             setEditRequestedBy(selectedJob.meta?.requested_by || '');
             setEditStatus(selectedJob.status || 'Active');
+            setNewTaskTitle('');
+            setNewTaskWeight('');
+            setNewTaskQuantity(1);
+            setSelectedTaskCatalogId('');
         }
     }, [selectedJobId]);
 
@@ -310,23 +314,62 @@ const JobManager = () => {
                                 <span style={{ color: '#fff' }}>2. Actionable Tasks</span>
                             </div>
 
-                            <form onSubmit={handleAddTask} style={{ display: 'flex', gap: 'var(--sp-3)', marginBottom: 'var(--sp-6)' }}>
-                                <div style={{ flex: 3 }}>
+                            <form onSubmit={handleAddTask} style={{ display: 'flex', gap: 'var(--sp-2)', marginBottom: 'var(--sp-6)', flexWrap: 'wrap' }}>
+                                <div style={{ flex: '1 1 30%', minWidth: '200px' }}>
+                                    <select
+                                        className="form-control"
+                                        value={selectedTaskCatalogId}
+                                        onChange={(e) => {
+                                            setSelectedTaskCatalogId(e.target.value);
+                                            // Auto-fill weight from catalog if empty
+                                            if (e.target.value) {
+                                                const catItem = taskCatalog.find(c => c.id === e.target.value);
+                                                if (catItem && catItem.defaultWeight && !newTaskWeight) {
+                                                    setNewTaskWeight(catItem.defaultWeight);
+                                                }
+                                            } else {
+                                                setNewTaskWeight('');
+                                            }
+                                        }}
+                                        style={{ background: 'rgba(0,0,0,0.2)' }}
+                                    >
+                                        <option value="">-- Predetermined Task --</option>
+                                        {taskCatalog.map(item => (
+                                            <option key={item.id} value={item.id}>
+                                                {item.description} {item.defaultWeight ? `(${item.defaultWeight}%)` : ''}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div style={{ flex: '1 1 40%', minWidth: '200px' }}>
                                     <input
                                         type="text"
                                         className="form-control"
-                                        placeholder="Enter new task description..."
+                                        placeholder="Or enter custom description..."
                                         value={newTaskTitle}
                                         onChange={(e) => setNewTaskTitle(e.target.value)}
-                                        required
                                         style={{ background: 'rgba(0,0,0,0.2)' }}
+                                        disabled={!!selectedTaskCatalogId}
                                     />
                                 </div>
-                                <div style={{ flex: 1 }}>
+                                <div style={{ flex: '0 0 100px' }}>
                                     <input
                                         type="number"
                                         className="form-control"
-                                        placeholder="Weight % (Optional)"
+                                        title="Quantity"
+                                        placeholder="Qty"
+                                        value={newTaskQuantity}
+                                        onChange={(e) => setNewTaskQuantity(e.target.value)}
+                                        min="1"
+                                        max="50"
+                                        style={{ background: 'rgba(0,0,0,0.2)' }}
+                                    />
+                                </div>
+                                <div style={{ flex: '0 0 120px' }}>
+                                    <input
+                                        type="number"
+                                        className="form-control"
+                                        placeholder="Weight %"
                                         value={newTaskWeight}
                                         onChange={(e) => setNewTaskWeight(e.target.value)}
                                         min="1"
@@ -334,8 +377,8 @@ const JobManager = () => {
                                         style={{ background: 'rgba(0,0,0,0.2)' }}
                                     />
                                 </div>
-                                <button type="submit" className="btn-secondary" style={{ padding: '0 16px', background: 'rgba(0, 179, 255, 0.1)', color: '#00b3ff', borderColor: 'rgba(0, 179, 255, 0.3)' }}>
-                                    <PlusCircle size={18} />
+                                <button type="submit" className="btn-secondary" style={{ flex: '0 0 50px', padding: '0', background: 'rgba(0, 179, 255, 0.1)', color: '#00b3ff', border: '1px solid rgba(0, 179, 255, 0.3)', display: 'flex', justifyContent: 'center', alignItems: 'center' }} disabled={!newTaskTitle && !selectedTaskCatalogId}>
+                                    <PlusCircle size={20} />
                                 </button>
                             </form>
 

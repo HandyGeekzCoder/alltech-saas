@@ -79,3 +79,13 @@ create policy "Enable full access for authenticated users" on tasks for all to a
 create policy "Enable full access for authenticated users" on line_items for all to authenticated using (true) with check (true);
 create policy "Enable full access for authenticated users" on catalog for all to authenticated using (true) with check (true);
 create policy "Enable full access for anon/authenticated users" on site_data for all to public using (true) with check (true);
+
+-- TASK CATALOG
+create table task_catalog (
+  id text primary key,
+  description text not null,
+  default_weight numeric
+);
+
+alter table task_catalog enable row level security;
+create policy "Enable full access for authenticated users" on task_catalog for all to authenticated using (true) with check (true);
