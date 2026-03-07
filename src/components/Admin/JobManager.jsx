@@ -153,11 +153,13 @@ const JobManager = () => {
         if (val === 'custom' || val === '') {
             setChargeDesc('');
             setChargeAmount('');
+            setChargeQty(1);
         } else {
             const item = billingCatalog.find(c => c.id === val);
             if (item) {
                 setChargeDesc(item.description);
                 setChargeAmount(item.defaultPrice);
+                setChargeQty(1);
             }
         }
     };
