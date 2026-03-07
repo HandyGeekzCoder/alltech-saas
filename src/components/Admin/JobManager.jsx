@@ -216,10 +216,16 @@ const JobManager = () => {
     // Auto calculate if there's any tax configuration based on the active Job's site
     let appliedTaxRate = 0;
     if (realSelectedUser && selectedJob?.meta?.location) {
-        // Attempt to find the specific site string match to extract the linked decimal tax rate
-        const matchedSite = realSelectedUser.sites?.find(s => `${s.companyName} - ${s.location}` === selectedJob.meta.location);
-        if (matchedSite && matchedSite.taxRate > 0) {
-            appliedTaxRate = matchedSite.taxRate / 100;
+        const isPrimaryHQ = selectedJob.meta.location === `${realSelectedUser.company} (Primary HQ)`;
+
+        if (isPrimaryHQ && realSelectedUser.taxRate > 0) {
+            appliedTaxRate = realSelectedUser.taxRate / 100;
+        } else {
+            // Attempt to find the specific site string match to extract the linked decimal tax rate
+            const matchedSite = realSelectedUser.sites?.find(s => `${s.companyName} - ${s.location}` === selectedJob.meta.location);
+            if (matchedSite && matchedSite.taxRate > 0) {
+                appliedTaxRate = matchedSite.taxRate / 100;
+            }
         }
     }
 
