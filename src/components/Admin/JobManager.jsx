@@ -858,19 +858,19 @@ const JobManager = () => {
 
                     <div className="print-totals">
                         <div className="print-totals-row">
-                            <span>Subtotal:</span>
-                            <span>${dbSubtotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                            <span style={{ color: '#555', paddingRight: '16px' }}>Subtotal:</span>
+                            <span style={{ fontWeight: '500' }}>${dbSubtotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                         </div>
 
                         {dbTaxAmount > 0 && (
                             <div className="print-totals-row">
-                                <span style={{ color: '#666' }}>Sales Tax ({displayedTaxRateStr}%):</span>
-                                <span>${dbTaxAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                                <span style={{ color: '#555', paddingRight: '16px' }}>Sales Tax ({displayedTaxRateStr}%):</span>
+                                <span style={{ fontWeight: '500' }}>${dbTaxAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                             </div>
                         )}
 
                         <div className="print-totals-row grand-total">
-                            <span>Amount Due:</span>
+                            <span style={{ paddingRight: '16px' }}>Amount Due:</span>
                             <span>${dbGrandTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                         </div>
                     </div>
