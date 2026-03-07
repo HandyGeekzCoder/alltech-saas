@@ -850,7 +850,7 @@ const JobManager = () => {
 
             {/* Print Only Payload */}
             {selectedJob && hasLineItems && (
-                <div className="print-only">
+                <div className="print-only print-container">
                     <div className="print-header">
                         <div>
                             {/* Dummy SVG Logo for printing purposes */}

@@ -312,7 +312,7 @@ img {
     }
 
     /* Hide everything by default in print mode */
-    .app-container,
+    .app-container> :not(.print-container),
     .admin-sidebar,
     .dashboard-topbar,
     .glass-panel,
@@ -325,13 +325,13 @@ img {
     /* Only show elements explicitly tagged for print */
     .print-only {
         display: block !important;
-        position: absolute;
-        left: 0;
-        top: 0;
+        position: relative;
         width: 100%;
-        min-height: 100vh;
+        height: auto;
+        overflow: visible;
         background: white;
-        padding: 40px;
+        padding: 0;
+        margin: 0;
         font-family: 'Inter', sans-serif;
     }
 
