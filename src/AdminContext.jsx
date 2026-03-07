@@ -721,6 +721,57 @@ export const AdminProvider = ({ children }) => {
         }
     };
 
+    const deleteInvoiceItems = async (userId, jobId, itemIdsArray) => {
+        const user = users.find(u => u.id === userId);
+        const job = user?.jobs.find(j => j.id === jobId);
+        if (!job) return;
+
+        const remainingLines = job.lineItems.filter(li => !itemIdsArray.includes(li.id));
+        const remainingRegular = remainingLines.filter(li => !li.description.startsWith('Sales Tax'));
+        const taxLine = remainingLines.find(li => li.description.startsWith('Sales Tax'));
+
+        let itemsToDelete = [...itemIdsArray];
+        let newSubtotal = remainingRegular.reduce((acc, current) => acc + (current.amount * current.quantity), 0);
+        let updatedTaxAmount = null;
+
+        if (taxLine) {
+            if (newSubtotal === 0) {
+                // If subtotal is 0, just delete the tax line too
+                itemsToDelete.push(taxLine.id);
+            } else {
+                // Extract tax rate from description (e.g. "Sales Tax (7.5%)")
+                const match = taxLine.description.match(/Sales Tax \(([\d.]+)%\)/);
+                const rate = match ? parseFloat(match[1]) : 0;
+                updatedTaxAmount = newSubtotal * (rate / 100);
+            }
+        }
+
+        if (itemsToDelete.length > 0) {
+            await supabase.from('line_items').delete().in('id', itemsToDelete);
+        }
+
+        if (updatedTaxAmount !== null) {
+            await supabase.from('line_items').update({ amount: parseFloat(updatedTaxAmount.toFixed(2)) }).eq('id', taxLine.id);
+        }
+
+        setUsers(prev => prev.map(u => {
+            if (u.id === userId) {
+                const updatedJobs = u.jobs.map(j => {
+                    if (j.id === jobId) {
+                        let finalLines = j.lineItems.filter(li => !itemsToDelete.includes(li.id));
+                        if (updatedTaxAmount !== null) {
+                            finalLines = finalLines.map(li => li.id === taxLine.id ? { ...li, amount: parseFloat(updatedTaxAmount.toFixed(2)) } : li);
+                        }
+                        return { ...j, lineItems: finalLines };
+                    }
+                    return j;
+                });
+                return { ...u, jobs: updatedJobs };
+            }
+            return u;
+        }));
+    };
+
     const addCatalogItem = async (description, defaultPrice) => {
         const newItem = {
             id: `cat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -890,6 +941,7 @@ export const AdminProvider = ({ children }) => {
             users, addLineItemToJob,
             loggedInUserId, loginClient, adminLogin,
             billingCatalog, addBatchInvoiceToJob,
+            deleteInvoiceItems,
             taskCatalog, addTaskCatalogItem, updateTaskCatalogItem, deleteTaskCatalogItem,
             addCatalogItem, updateCatalogItem, deleteCatalogItem,
             addTaskToJob, toggleTaskCompletion, deleteTaskFromJob, updateJobStatus,

@@ -3,7 +3,7 @@ import { AdminContext } from '../../AdminContext';
 import { Target, CheckCircle2, Circle, Trash2, PlusCircle, ServerCog, Activity, Clock, DollarSign, Printer } from 'lucide-react';
 
 const JobManager = () => {
-    const { users, addTaskToJob, toggleTaskCompletion, deleteTaskFromJob, updateJobNotes, updateJobDetails, updateJobStatus, billingCatalog, taskCatalog, addBatchInvoiceToJob } = useContext(AdminContext);
+    const { users, addTaskToJob, toggleTaskCompletion, deleteTaskFromJob, updateJobNotes, updateJobDetails, updateJobStatus, billingCatalog, taskCatalog, addBatchInvoiceToJob, deleteInvoiceItems } = useContext(AdminContext);
 
     const usersWithJobs = users.filter(user => !user.parentClientId && user.jobs && user.jobs.length > 0);
 
@@ -23,18 +23,24 @@ const JobManager = () => {
         setSelectedSite('');
         setSelectedJobId(''); // Reset job selection when user changes
         setStagedItems([]);
+        setIsEditingInvoice(false);
+        setSelectedInvoiceLines([]);
     };
 
     const handleSiteSelect = (e) => {
         setSelectedSite(e.target.value);
         setSelectedJobId('');
         setStagedItems([]);
+        setIsEditingInvoice(false);
+        setSelectedInvoiceLines([]);
     };
 
     const handleJobSelect = (e) => {
         setSelectedJobId(e.target.value);
         setStagedItems([]);
         setSuccessMsg('');
+        setIsEditingInvoice(false);
+        setSelectedInvoiceLines([]);
     };
 
     const handleAddTask = async (e) => {
@@ -145,6 +151,17 @@ const JobManager = () => {
     const [chargeAmount, setChargeAmount] = useState('');
     const [chargeQty, setChargeQty] = useState(1);
     const [successMsg, setSuccessMsg] = useState('');
+
+    const [isEditingInvoice, setIsEditingInvoice] = useState(false);
+    const [selectedInvoiceLines, setSelectedInvoiceLines] = useState([]);
+
+    const handleDeleteSelectedLines = () => {
+        if (activeJobUserId && selectedJobId && selectedInvoiceLines.length > 0) {
+            deleteInvoiceItems(activeJobUserId, selectedJobId, selectedInvoiceLines);
+            setSelectedInvoiceLines([]);
+            setIsEditingInvoice(false);
+        }
+    };
 
     const handleCatalogSelect = (e) => {
         const val = e.target.value;
@@ -614,12 +631,23 @@ const JobManager = () => {
 
                                 {hasLineItems && (
                                     <div style={{ marginTop: 'var(--sp-4)', background: 'rgba(0, 0, 0, 0.2)', padding: 'var(--sp-4)', borderRadius: '8px' }}>
-                                        <div style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px', marginBottom: '8px', color: '#fff', fontWeight: 'bold' }}>
-                                            Committed Invoice
+                                        <div style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <span style={{ color: '#fff', fontWeight: 'bold' }}>Committed Invoice</span>
+                                            <button
+                                                className="btn-secondary"
+                                                style={{ padding: '4px 8px', fontSize: '0.8rem', borderColor: 'rgba(255,255,255,0.2)' }}
+                                                onClick={() => {
+                                                    setIsEditingInvoice(!isEditingInvoice);
+                                                    setSelectedInvoiceLines([]);
+                                                }}
+                                            >
+                                                {isEditingInvoice ? 'Cancel Edit' : 'Edit Lines'}
+                                            </button>
                                         </div>
                                         <table style={{ width: '100%', fontSize: '0.85rem' }}>
                                             <thead>
                                                 <tr style={{ color: 'var(--text-muted)', textAlign: 'left', borderBottom: '1px dashed rgba(255,255,255,0.1)' }}>
+                                                    {isEditingInvoice && <th style={{ paddingBottom: '4px', width: '30px' }}>Select</th>}
                                                     <th style={{ paddingBottom: '4px' }}>Item</th>
                                                     <th style={{ paddingBottom: '4px', textAlign: 'right' }}>Price</th>
                                                     <th style={{ paddingBottom: '4px', textAlign: 'right' }}>Total</th>
@@ -628,6 +656,18 @@ const JobManager = () => {
                                             <tbody>
                                                 {regularLineItems.map(item => (
                                                     <tr key={item.id} style={{ borderBottom: '1px dashed rgba(255,255,255,0.05)' }}>
+                                                        {isEditingInvoice && (
+                                                            <td style={{ padding: '8px 4px' }}>
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={selectedInvoiceLines.includes(item.id)}
+                                                                    onChange={(e) => {
+                                                                        if (e.target.checked) setSelectedInvoiceLines(prev => [...prev, item.id]);
+                                                                        else setSelectedInvoiceLines(prev => prev.filter(id => id !== item.id));
+                                                                    }}
+                                                                />
+                                                            </td>
+                                                        )}
                                                         <td style={{ padding: '8px 4px', color: '#e0e0e0' }}>
                                                             {item.quantity}x {item.description}
                                                         </td>
@@ -658,6 +698,16 @@ const JobManager = () => {
                                                 <span>${dbGrandTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                                             </div>
                                         </div>
+
+                                        {isEditingInvoice && selectedInvoiceLines.length > 0 && (
+                                            <button
+                                                onClick={handleDeleteSelectedLines}
+                                                className="btn-primary"
+                                                style={{ width: '100%', marginTop: '16px', background: 'var(--primary)' }}
+                                            >
+                                                Delete Selected Lines ({selectedInvoiceLines.length})
+                                            </button>
+                                        )}
 
                                         <button
                                             onClick={handlePrintInvoice}
