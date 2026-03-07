@@ -15,6 +15,8 @@ const JobManager = () => {
     // New Task State
     const [newTaskTitle, setNewTaskTitle] = useState('');
     const [newTaskWeight, setNewTaskWeight] = useState('');
+    const [newTaskQuantity, setNewTaskQuantity] = useState(1);
+    const [selectedTaskCatalogId, setSelectedTaskCatalogId] = useState('');
 
     const handleUserSelect = (e) => {
         setSelectedUserId(e.target.value);
@@ -35,12 +37,27 @@ const JobManager = () => {
         setSuccessMsg('');
     };
 
-    const handleAddTask = (e) => {
+    const handleAddTask = async (e) => {
         e.preventDefault();
-        if (activeJobUserId && selectedJobId && newTaskTitle) {
-            addTaskToJob(activeJobUserId, selectedJobId, newTaskTitle, newTaskWeight || null);
+        if (activeJobUserId && selectedJobId && (newTaskTitle || selectedTaskCatalogId)) {
+            let finalTitle = newTaskTitle;
+            let finalWeight = newTaskWeight;
+
+            if (selectedTaskCatalogId && !newTaskTitle) {
+                const catalogItem = taskCatalog.find(c => c.id === selectedTaskCatalogId);
+                if (catalogItem) {
+                    finalTitle = catalogItem.description;
+                    if (catalogItem.defaultWeight && !newTaskWeight) {
+                        finalWeight = catalogItem.defaultWeight;
+                    }
+                }
+            }
+
+            await addTaskToJob(activeJobUserId, selectedJobId, finalTitle, finalWeight, newTaskQuantity);
             setNewTaskTitle('');
             setNewTaskWeight('');
+            setNewTaskQuantity(1);
+            setSelectedTaskCatalogId('');
         }
     };
 
