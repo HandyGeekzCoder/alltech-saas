@@ -274,7 +274,7 @@ const JobManager = () => {
                 </div>
             </div>
 
-            <div className="glass-panel" style={{ marginTop: 'var(--sp-6)', padding: 'var(--sp-6)' }}>
+            <div className="glass-panel no-print" style={{ marginTop: 'var(--sp-6)', padding: 'var(--sp-6)' }}>
                 <div className="widget-header" style={{ marginBottom: 'var(--sp-4)' }}>
                     <Target size={20} color="#00ff64" />
                     <span style={{ color: '#fff' }}>1. Target Activation</span>
@@ -333,7 +333,7 @@ const JobManager = () => {
             </div>
 
             {selectedJob && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 7fr) minmax(0, 3fr)', gap: 'var(--sp-6)', marginTop: 'var(--sp-6)' }}>
+                <div className="no-print" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 7fr) minmax(0, 3fr)', gap: 'var(--sp-6)', marginTop: 'var(--sp-6)' }}>
 
                     {/* Left Column: Tasks */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-6)' }}>

@@ -312,10 +312,11 @@ img {
     }
 
     /* Hide everything by default in print mode */
-    .app-container> :not(.print-container),
+    .no-print,
+    .navbar,
+    .footer,
     .admin-sidebar,
     .dashboard-topbar,
-    .glass-panel,
     button,
     select,
     input {
