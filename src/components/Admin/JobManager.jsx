@@ -597,22 +597,69 @@ const JobManager = () => {
                                 </div>
 
                                 {hasLineItems && (
-                                    <button
-                                        onClick={handlePrintInvoice}
-                                        className="btn-secondary"
-                                        style={{
-                                            width: '100%',
-                                            marginTop: 'var(--sp-4)',
-                                            display: 'flex',
-                                            justifyContent: 'center',
-                                            alignItems: 'center',
-                                            gap: '8px',
-                                            borderColor: '#00b3ff',
-                                            color: '#00b3ff'
-                                        }}
-                                    >
-                                        <Printer size={16} /> Print Official Invoice
-                                    </button>
+                                    <div style={{ marginTop: 'var(--sp-4)', background: 'rgba(0, 0, 0, 0.2)', padding: 'var(--sp-4)', borderRadius: '8px' }}>
+                                        <div style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px', marginBottom: '8px', color: '#fff', fontWeight: 'bold' }}>
+                                            Committed Invoice
+                                        </div>
+                                        <table style={{ width: '100%', fontSize: '0.85rem' }}>
+                                            <thead>
+                                                <tr style={{ color: 'var(--text-muted)', textAlign: 'left', borderBottom: '1px dashed rgba(255,255,255,0.1)' }}>
+                                                    <th style={{ paddingBottom: '4px' }}>Item</th>
+                                                    <th style={{ paddingBottom: '4px', textAlign: 'right' }}>Price</th>
+                                                    <th style={{ paddingBottom: '4px', textAlign: 'right' }}>Total</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {selectedJob.lineItems.map(item => (
+                                                    <tr key={item.id} style={{ borderBottom: '1px dashed rgba(255,255,255,0.05)' }}>
+                                                        <td style={{ padding: '8px 4px', color: '#e0e0e0' }}>
+                                                            {item.quantity}x {item.description}
+                                                        </td>
+                                                        <td style={{ padding: '8px 4px', textAlign: 'right', color: 'var(--text-muted)' }}>
+                                                            ${item.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                                        </td>
+                                                        <td style={{ padding: '8px 4px', textAlign: 'right', color: '#fff', fontWeight: '500' }}>
+                                                            ${(item.amount * item.quantity).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+
+                                        <div style={{ marginTop: '12px', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '4px' }}>
+                                                <span>Subtotal:</span>
+                                                <span>${dbSubtotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                                            </div>
+                                            {appliedTaxRate > 0 && (
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '4px' }}>
+                                                    <span>Sales Tax ({(appliedTaxRate * 100).toFixed(2)}%):</span>
+                                                    <span>${dbTaxAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                                                </div>
+                                            )}
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#00ff64', fontSize: '1rem', fontWeight: 'bold', marginTop: '4px' }}>
+                                                <span>Total:</span>
+                                                <span>${dbGrandTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                                            </div>
+                                        </div>
+
+                                        <button
+                                            onClick={handlePrintInvoice}
+                                            className="btn-secondary"
+                                            style={{
+                                                width: '100%',
+                                                marginTop: 'var(--sp-4)',
+                                                display: 'flex',
+                                                justifyContent: 'center',
+                                                alignItems: 'center',
+                                                gap: '8px',
+                                                borderColor: '#00b3ff',
+                                                color: '#00b3ff'
+                                            }}
+                                        >
+                                            <Printer size={16} /> Print Official Invoice
+                                        </button>
+                                    </div>
                                 )}
                             </div>
                         </div>
