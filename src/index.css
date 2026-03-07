@@ -315,12 +315,25 @@ img {
     .no-print,
     .navbar,
     .footer,
-    .admin-sidebar,
+    .dashboard-sidebar,
     .dashboard-topbar,
     button,
     select,
     input {
         display: none !important;
+    }
+
+    /* Override Admin Layout for Printing */
+    .dashboard-layout {
+        display: block !important;
+        background: none !important;
+        background-color: white !important;
+    }
+
+    .dashboard-main {
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
     }
 
     /* Only show elements explicitly tagged for print */
