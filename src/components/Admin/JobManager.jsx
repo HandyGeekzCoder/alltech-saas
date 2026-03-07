@@ -963,7 +963,7 @@ const JobManager = () => {
                         <div>
                             {/* Dummy SVG Logo for printing purposes */}
                             <svg width="180" height="40" viewBox="0 0 180 40" xmlns="http://www.w3.org/2000/svg">
-                                <text x="0" y="28" fontFamily="Outfit, sans-serif" fontSize="28" fontWeight="800" fill="#050508">ALLTECH</text>
+                                <text x="0" y="28" fontFamily="Outfit, sans-serif" fontSize="28" fontWeight="800" fill="#050508">ALLTECH INSTALL</text>
                             </svg>
                             <div style={{ marginTop: '12px', color: '#555', fontSize: '0.95rem', lineHeight: '1.4' }}>
                                 123 Tech Boulevard<br />
@@ -1037,7 +1037,7 @@ const JobManager = () => {
 
                     <div style={{ clear: 'both', paddingTop: '60px', borderTop: '1px solid #eee', marginTop: '60px', textAlign: 'center', color: '#777', fontSize: '0.9rem' }}>
                         <strong>Payment Instructions:</strong>
-                        <p>Please make all checks payable to AllTech. Payment is due within 30 days.</p>
+                        <p>Please make all checks payable to AllTech Install. Payment is due within 30 days.</p>
                         <p>Thank you for your business!</p>
                     </div>
                 </div>
