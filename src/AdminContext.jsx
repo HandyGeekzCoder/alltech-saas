@@ -158,7 +158,10 @@ export const AdminProvider = ({ children }) => {
                                 isCompleted: t.is_completed
                             })),
                             lineItems: (liRes || []).map(l => ({
-                                ...l,
+                                id: l.id,
+                                description: l.description,
+                                amount: Number(l.amount),
+                                quantity: l.quantity ? Number(l.quantity) : 1, // Fallback to 1 for backwards compatibility with legacy rows
                                 dateAdded: l.date_added
                             }))
                         };
@@ -647,7 +650,8 @@ export const AdminProvider = ({ children }) => {
                 id: `li_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                 job_id: jobId,
                 description: item.description,
-                amount: itemLineTotal,
+                amount: parseFloat(item.amount),
+                quantity: parseInt(item.quantity, 10),
                 date_added: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
             };
         });
@@ -660,6 +664,7 @@ export const AdminProvider = ({ children }) => {
                 job_id: jobId,
                 description: `Sales Tax (${applicableTaxRate}%)`,
                 amount: parseFloat(taxAmount.toFixed(2)),
+                quantity: 1,
                 date_added: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
             });
         }
@@ -680,6 +685,7 @@ export const AdminProvider = ({ children }) => {
                 id: li.id,
                 description: li.description,
                 amount: li.amount,
+                quantity: li.quantity,
                 dateAdded: li.date_added
             }));
 

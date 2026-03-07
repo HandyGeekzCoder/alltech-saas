@@ -36,6 +36,7 @@ create table line_items (
   job_id text references jobs(id) on delete cascade not null,
   description text not null,
   amount numeric not null,
+  quantity numeric default 1,
   date_added text not null
 );
 
