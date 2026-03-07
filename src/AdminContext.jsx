@@ -535,7 +535,13 @@ export const AdminProvider = ({ children }) => {
         const actingUser = users.find(u => u.id === userId);
         const targetUserId = actingUser?.parentClientId || userId;
 
-        const invoiceRef = Math.random().toString(36).substring(2, 8).toUpperCase();
+        const invoiceRef = Math.random().toString(36).substring(2, 6).toUpperCase();
+
+        // Generate a 4-char hash of the company name + a random 4-char string
+        const companyHash = (actingUser?.company || 'ALLT').substring(0, 4).toUpperCase().replace(/[^A-Z0-9]/g, 'X');
+        const randomHash = Math.random().toString(36).substring(2, 6).toUpperCase();
+        const jobRef = `${companyHash}-${randomHash}`;
+
         const newJob = {
             id: `JOB-${Math.floor(1000 + Math.random() * 9000)}`,
             user_id: targetUserId,
@@ -543,7 +549,7 @@ export const AdminProvider = ({ children }) => {
             status: 'Pending Review',
             progress: 0,
             date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-            meta: { urgency, location, details, requested_by: actingUser?.company, invoice_ref: invoiceRef }
+            meta: { urgency, location, details, requested_by: actingUser?.company, invoice_ref: invoiceRef, job_ref: jobRef }
         };
 
         // UI Optimistic
@@ -581,7 +587,7 @@ export const AdminProvider = ({ children }) => {
         await supabase.from('jobs').update({ meta: { ...currentMeta, adminNotes: notes } }).eq('id', jobId);
     };
 
-    const updateJobDetails = async (userId, jobId, newLocation, newRequestedBy, newInvoiceRef) => {
+    const updateJobDetails = async (userId, jobId, newLocation, newRequestedBy, newInvoiceRef, newJobRef) => {
         // UI Optimistic Update
         setUsers(prev => prev.map(user => {
             if (user.id === userId) {
@@ -590,7 +596,7 @@ export const AdminProvider = ({ children }) => {
                     jobs: user.jobs.map(job =>
                         job.id === jobId ? {
                             ...job,
-                            meta: { ...job.meta, location: newLocation, requested_by: newRequestedBy, invoice_ref: newInvoiceRef }
+                            meta: { ...job.meta, location: newLocation, requested_by: newRequestedBy, invoice_ref: newInvoiceRef, job_ref: newJobRef }
                         } : job
                     )
                 };
@@ -603,7 +609,7 @@ export const AdminProvider = ({ children }) => {
         const currentMeta = jobData?.meta || {};
 
         // Push merged JSONB to DB
-        await supabase.from('jobs').update({ meta: { ...currentMeta, location: newLocation, requested_by: newRequestedBy, invoice_ref: newInvoiceRef } }).eq('id', jobId);
+        await supabase.from('jobs').update({ meta: { ...currentMeta, location: newLocation, requested_by: newRequestedBy, invoice_ref: newInvoiceRef, job_ref: newJobRef } }).eq('id', jobId);
     };
 
     const updateJobStatus = async (userId, jobId, newStatus) => {
@@ -622,6 +628,54 @@ export const AdminProvider = ({ children }) => {
 
         // DB Update
         await supabase.from('jobs').update({ status: newStatus }).eq('id', jobId);
+    };
+
+    const archiveCurrentInvoice = async (userId, jobId, invoiceSnapshot, lineItemIdsToDelete) => {
+        // UI Optimistic Update
+        setUsers(prev => prev.map(user => {
+            if (user.id === userId) {
+                return {
+                    ...user,
+                    jobs: user.jobs.map(job => {
+                        if (job.id === jobId) {
+                            const newInvoiceRefHash = Math.random().toString(36).substring(2, 6).toUpperCase();
+                            const currentPastInvoices = job.meta?.past_invoices || [];
+                            return {
+                                ...job,
+                                lineItems: [],
+                                meta: {
+                                    ...job.meta,
+                                    invoice_ref: newInvoiceRefHash,
+                                    past_invoices: [invoiceSnapshot, ...currentPastInvoices]
+                                }
+                            };
+                        }
+                        return job;
+                    })
+                };
+            }
+            return user;
+        }));
+
+        // Fetch existing meta from Supabase
+        const { data: jobData } = await supabase.from('jobs').select('meta').eq('id', jobId).single();
+        const currentMeta = jobData?.meta || {};
+        const currentPastInvoices = currentMeta.past_invoices || [];
+        const newInvoiceRefHash = Math.random().toString(36).substring(2, 6).toUpperCase();
+
+        // 1. Delete all old active line items from relational DB
+        if (lineItemIdsToDelete.length > 0) {
+            await supabase.from('line_items').delete().in('id', lineItemIdsToDelete);
+        }
+
+        // 2. Push JSON snapshot to 'past_invoices' array and reset invoice_ref
+        await supabase.from('jobs').update({
+            meta: {
+                ...currentMeta,
+                invoice_ref: newInvoiceRefHash,
+                past_invoices: [invoiceSnapshot, ...currentPastInvoices]
+            }
+        }).eq('id', jobId);
     };
 
     const addBatchInvoiceToJob = async (userId, jobId, itemsArray) => {
@@ -942,7 +996,7 @@ export const AdminProvider = ({ children }) => {
             users, addLineItemToJob,
             loggedInUserId, loginClient, adminLogin,
             billingCatalog, addBatchInvoiceToJob,
-            deleteInvoiceItems,
+            deleteInvoiceItems, archiveCurrentInvoice,
             taskCatalog, addTaskCatalogItem, updateTaskCatalogItem, deleteTaskCatalogItem,
             addCatalogItem, updateCatalogItem, deleteCatalogItem,
             addTaskToJob, toggleTaskCompletion, deleteTaskFromJob, updateJobStatus,

@@ -3,7 +3,7 @@ import { AdminContext } from '../../AdminContext';
 import { Target, CheckCircle2, Circle, Trash2, PlusCircle, ServerCog, Activity, Clock, DollarSign, Printer } from 'lucide-react';
 
 const JobManager = () => {
-    const { users, addTaskToJob, toggleTaskCompletion, deleteTaskFromJob, updateJobNotes, updateJobDetails, updateJobStatus, billingCatalog, taskCatalog, addBatchInvoiceToJob, deleteInvoiceItems } = useContext(AdminContext);
+    const { users, addTaskToJob, toggleTaskCompletion, deleteTaskFromJob, updateJobNotes, updateJobDetails, updateJobStatus, billingCatalog, taskCatalog, addBatchInvoiceToJob, deleteInvoiceItems, archiveCurrentInvoice } = useContext(AdminContext);
 
     const usersWithJobs = users.filter(user => !user.parentClientId && user.jobs && user.jobs.length > 0);
 
@@ -109,6 +109,7 @@ const JobManager = () => {
     const [editLocation, setEditLocation] = useState('');
     const [editRequestedBy, setEditRequestedBy] = useState('');
     const [editInvoiceRef, setEditInvoiceRef] = useState('');
+    const [editJobRef, setEditJobRef] = useState('');
     const [editStatus, setEditStatus] = useState('');
     const [isSavingDetails, setIsSavingDetails] = useState(false);
 
@@ -119,6 +120,7 @@ const JobManager = () => {
             setEditLocation(selectedJob.meta?.location || '');
             setEditRequestedBy(selectedJob.meta?.requested_by || '');
             setEditInvoiceRef(selectedJob.meta?.invoice_ref || '');
+            setEditJobRef(selectedJob.meta?.job_ref || '');
             setEditStatus(selectedJob.status || 'Active');
             setNewTaskTitle('');
             setNewTaskWeight('');
@@ -130,7 +132,7 @@ const JobManager = () => {
     const handleSaveDetails = async () => {
         if (!selectedJob) return;
         setIsSavingDetails(true);
-        await updateJobDetails(activeJobUserId, selectedJobId, editLocation, editRequestedBy, editInvoiceRef);
+        await updateJobDetails(activeJobUserId, selectedJobId, editLocation, editRequestedBy, editInvoiceRef, editJobRef);
         // Only trigger status update if it actually changed
         if (editStatus !== selectedJob.status) {
             await updateJobStatus(activeJobUserId, selectedJobId, editStatus);
@@ -203,29 +205,6 @@ const JobManager = () => {
         }
     };
 
-    const handleRecordPayment = () => {
-        const amountStr = window.prompt("Enter payment/deposit amount (USD):", "0.00");
-        if (!amountStr) return;
-
-        const amount = parseFloat(amountStr);
-        if (isNaN(amount) || amount <= 0) {
-            alert("Invalid payment amount. Please enter a positive number.");
-            return;
-        }
-
-        const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-        setStagedItems(prev => [
-            ...prev,
-            {
-                id: `draft_${Date.now()}`,
-                description: `Payment Received - ${dateStr}`,
-                amount: -Math.abs(amount),
-                quantity: 1
-            }
-        ]);
-        setSuccessMsg('Payment staged for invoice.');
-        setTimeout(() => setSuccessMsg(''), 3000);
-    };
 
     const removeStagedItem = (draftId) => {
         setStagedItems(prev => prev.filter(item => item.id !== draftId));
@@ -238,6 +217,32 @@ const JobManager = () => {
             setStagedItems([]);
             setTimeout(() => setSuccessMsg(''), 4000);
         }
+    };
+
+    const handleArchiveInvoice = () => {
+        if (!selectedJob || !selectedJob.lineItems || selectedJob.lineItems.length === 0) {
+            alert("No line items on the current invoice to archive.");
+            return;
+        }
+
+        const confirmArchive = window.confirm("Are you sure you want to mark this invoice as Paid? This will permanently archive the items and generate a fresh invoice for the next billing cycle.");
+        if (!confirmArchive) return;
+
+        // Build snapshot
+        const snapshot = {
+            id: selectedJob.meta?.invoice_ref || `GEN-${Date.now()}`,
+            dateArchived: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+            totalItems: selectedJob.lineItems.length,
+            subtotal: Number(activeSubtotal),
+            tax: Number(activeTaxAmount),
+            grandTotal: Number(activeTotal)
+        };
+
+        const itemIdsToDelete = selectedJob.lineItems.map(li => li.id);
+
+        archiveCurrentInvoice(activeJobUserId, selectedJobId, snapshot, itemIdsToDelete);
+        setSuccessMsg(`Invoice ${snapshot.id} saved to archives safely!`);
+        setTimeout(() => setSuccessMsg(''), 4000);
     };
 
     const stagedTotal = stagedItems.reduce((acc, current) => acc + (current.amount * current.quantity), 0);
@@ -547,6 +552,16 @@ const JobManager = () => {
                                 {isEditing ? (
                                     <>
                                         <div>
+                                            <span className="text-muted" style={{ fontSize: 'var(--text-sm)', display: 'block', marginBottom: '4px' }}>Job Ref</span>
+                                            <input
+                                                type="text"
+                                                className="form-control"
+                                                style={{ padding: '6px', fontSize: '14px', textTransform: 'uppercase' }}
+                                                value={editJobRef}
+                                                onChange={(e) => setEditJobRef(e.target.value.toUpperCase())}
+                                            />
+                                        </div>
+                                        <div>
                                             <span className="text-muted" style={{ fontSize: 'var(--text-sm)', display: 'block', marginBottom: '4px' }}>Invoice Ref</span>
                                             <input
                                                 type="text"
@@ -607,6 +622,12 @@ const JobManager = () => {
                                     </>
                                 ) : (
                                     <>
+                                        {selectedJob.meta?.job_ref && (
+                                            <div>
+                                                <span className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>Job Ref</span>
+                                                <div style={{ color: '#fff', fontWeight: '500' }}>{selectedJob.meta.job_ref}</div>
+                                            </div>
+                                        )}
                                         {selectedJob.meta?.invoice_ref && (
                                             <div>
                                                 <span className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>Invoice Ref</span>
@@ -752,11 +773,30 @@ const JobManager = () => {
                                         )}
 
                                         <button
+                                            onClick={handleArchiveInvoice}
+                                            className="btn-primary"
+                                            style={{
+                                                width: '100%',
+                                                marginTop: 'var(--sp-4)',
+                                                display: 'flex',
+                                                justifyContent: 'center',
+                                                alignItems: 'center',
+                                                gap: '8px',
+                                                background: 'linear-gradient(135deg, #00ff64, #00b3ff)',
+                                                color: '#08080c',
+                                                fontWeight: 'bold',
+                                                border: 'none'
+                                            }}
+                                        >
+                                            <DollarSign size={16} /> Mark Invoice Paid & Start Fresh
+                                        </button>
+
+                                        <button
                                             onClick={handlePrintInvoice}
                                             className="btn-secondary"
                                             style={{
                                                 width: '100%',
-                                                marginTop: 'var(--sp-4)',
+                                                marginTop: 'var(--sp-2)',
                                                 display: 'flex',
                                                 justifyContent: 'center',
                                                 alignItems: 'center',
@@ -840,14 +880,7 @@ const JobManager = () => {
                                 </button>
                             </form>
 
-                            <button
-                                type="button"
-                                onClick={handleRecordPayment}
-                                className="btn-secondary"
-                                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: 'var(--sp-2)', borderColor: '#00ff64', color: '#00ff64' }}
-                            >
-                                <DollarSign size={18} /> Record Payment / Deposit
-                            </button>
+
 
                             {/* Pending Staged Invoice List */}
                             {stagedItems.length > 0 && (
@@ -892,6 +925,30 @@ const JobManager = () => {
                                 </div>
                             )}
 
+                            {/* Past Invoices Array */}
+                            {selectedJob?.meta?.past_invoices && selectedJob.meta.past_invoices.length > 0 && (
+                                <div style={{ marginTop: 'var(--sp-4)', background: 'var(--glass-bg)', padding: 'var(--sp-4)', borderRadius: '8px', border: '1px solid var(--glass-border)' }}>
+                                    <div style={{ paddingBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.1)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <Activity size={16} color="#00ff64" />
+                                        <span style={{ color: '#fff', fontWeight: 'bold' }}>Archived Paid Invoices</span>
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        {selectedJob.meta.past_invoices.map((inv, idx) => (
+                                            <div key={idx} style={{ padding: '8px', background: 'rgba(0,0,0,0.3)', borderRadius: '6px', fontSize: '0.85rem' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                                    <span style={{ color: '#00b3ff', fontWeight: 'bold' }}>INV-{inv.id}</span>
+                                                    <span style={{ color: '#00ff64', fontWeight: 'bold' }}>${inv.grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                                                </div>
+                                                <div style={{ color: '#aaa', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between' }}>
+                                                    <span>{inv.totalItems} Items</span>
+                                                    <span>Paid: {inv.dateArchived}</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
                             {successMsg && <div style={{ marginTop: '12px', color: '#00ff64', fontSize: '0.875rem', textAlign: 'center', padding: '8px', background: 'rgba(0, 255, 100, 0.1)', borderRadius: '8px' }}>{successMsg}</div>}
                         </div>
                     </div>
@@ -933,6 +990,9 @@ const JobManager = () => {
                         <div style={{ textAlign: 'right', minWidth: '300px' }}>
                             <strong style={{ color: '#222', display: 'block', marginBottom: '8px', fontSize: '1.1rem', borderBottom: '2px solid #eee', paddingBottom: '4px' }}>Project Reference:</strong>
                             <div style={{ fontSize: '1.1rem', fontWeight: '500', color: '#000' }}>{selectedJob.title}</div>
+                            {selectedJob.meta?.job_ref && (
+                                <div style={{ color: '#555', marginTop: '4px', fontStyle: 'italic' }}>Job ID: {selectedJob.meta.job_ref}</div>
+                            )}
                         </div>
                     </div>
 
