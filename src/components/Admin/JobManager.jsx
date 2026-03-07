@@ -229,13 +229,21 @@ const JobManager = () => {
         }
     }
 
+    const regularLineItems = selectedJob?.lineItems?.filter(item => !item.description.startsWith('Sales Tax')) || [];
+    const taxLineItem = selectedJob?.lineItems?.find(item => item.description.startsWith('Sales Tax'));
+
     let dbSubtotal = 0;
-    if (hasLineItems) {
-        dbSubtotal = selectedJob.lineItems.reduce((acc, current) => acc + (current.amount * current.quantity), 0);
+    if (regularLineItems.length > 0) {
+        dbSubtotal = regularLineItems.reduce((acc, current) => acc + (current.amount * current.quantity), 0);
     }
 
-    const dbTaxAmount = dbSubtotal * appliedTaxRate;
+    const dbTaxAmount = taxLineItem ? taxLineItem.amount : 0;
     const dbGrandTotal = dbSubtotal + dbTaxAmount;
+
+    // Extract exact recorded tax rate for display
+    const displayedTaxRateStr = taxLineItem
+        ? taxLineItem.description.replace('Sales Tax (', '').replace('%)', '')
+        : (appliedTaxRate * 100).toFixed(2);
 
     return (
         <div>
@@ -616,7 +624,7 @@ const JobManager = () => {
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {selectedJob.lineItems.map(item => (
+                                                {regularLineItems.map(item => (
                                                     <tr key={item.id} style={{ borderBottom: '1px dashed rgba(255,255,255,0.05)' }}>
                                                         <td style={{ padding: '8px 4px', color: '#e0e0e0' }}>
                                                             {item.quantity}x {item.description}
@@ -637,9 +645,9 @@ const JobManager = () => {
                                                 <span>Subtotal:</span>
                                                 <span>${dbSubtotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                                             </div>
-                                            {appliedTaxRate > 0 && (
+                                            {dbTaxAmount > 0 && (
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '4px' }}>
-                                                    <span>Sales Tax ({(appliedTaxRate * 100).toFixed(2)}%):</span>
+                                                    <span>Sales Tax ({displayedTaxRateStr}%):</span>
                                                     <span>${dbTaxAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                                                 </div>
                                             )}
@@ -835,7 +843,7 @@ const JobManager = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {selectedJob.lineItems.map(item => (
+                            {regularLineItems.map(item => (
                                 <tr key={item.id}>
                                     <td style={{ fontWeight: 'bold' }}>{item.quantity}</td>
                                     <td>{item.description}</td>
@@ -852,9 +860,9 @@ const JobManager = () => {
                             <span>${dbSubtotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                         </div>
 
-                        {appliedTaxRate > 0 && (
+                        {dbTaxAmount > 0 && (
                             <div className="print-totals-row">
-                                <span style={{ color: '#666' }}>Sales Tax ({(appliedTaxRate * 100).toFixed(2)}%):</span>
+                                <span style={{ color: '#666' }}>Sales Tax ({displayedTaxRateStr}%):</span>
                                 <span>${dbTaxAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                             </div>
                         )}
