@@ -387,6 +387,15 @@ export const AdminProvider = ({ children }) => {
         }
     };
 
+    const updateClientProfile = async (clientId, company, email) => {
+        const { error } = await supabase.from('profiles').update({ company, email }).eq('id', clientId);
+        if (!error) {
+            setUsers(prev => prev.map(u => u.id === clientId ? { ...u, company, email } : u));
+        } else {
+            console.error("Failed to update client profile:", error);
+        }
+    };
+
     const addEmployeeToClient = async (parentClientId, employeeName, employeeEmail, tempPassword, permissions) => {
         // Create Supabase Auth User
         const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -876,7 +885,7 @@ export const AdminProvider = ({ children }) => {
             taskCatalog, addTaskCatalogItem, updateTaskCatalogItem, deleteTaskCatalogItem,
             addCatalogItem, updateCatalogItem, deleteCatalogItem,
             addTaskToJob, toggleTaskCompletion, deleteTaskFromJob, updateJobStatus,
-            addClientAccount, updateClientPassword, addJobToAccount, updateJobNotes, updateJobDetails,
+            addClientAccount, updateClientProfile, updateClientPassword, addJobToAccount, updateJobNotes, updateJobDetails,
             addSiteToAccount, deleteSiteFromAccount, updateSiteDetails, addEmployeeToClient,
             isLoading
         }}>

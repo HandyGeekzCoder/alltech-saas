@@ -3,7 +3,7 @@ import { AdminContext, calculateUserBalance } from '../../AdminContext';
 import { Users, KeyRound, Copy, Building, MapPin, Edit2, Save, X, ChevronDown, ChevronRight, Briefcase } from 'lucide-react';
 
 const UserManager = () => {
-    const { users, addClientAccount, updateSiteDetails, addSiteToAccount, addEmployeeToClient } = useContext(AdminContext);
+    const { users, addClientAccount, updateSiteDetails, addSiteToAccount, addEmployeeToClient, updateClientProfile } = useContext(AdminContext);
 
     // Invite Client Form State
     const [inviteCompany, setInviteCompany] = useState('');
@@ -12,6 +12,12 @@ const UserManager = () => {
     const [inviteSuccessMsg, setInviteSuccessMsg] = useState('');
 
     const [expandedClientId, setExpandedClientId] = useState(null);
+
+    // HQ Editing State
+    const [editingHqId, setEditingHqId] = useState(null);
+    const [editHqCompany, setEditHqCompany] = useState('');
+    const [editHqEmail, setEditHqEmail] = useState('');
+    const [isSavingHq, setIsSavingHq] = useState(false);
 
     // Site Editing State
     const [editingSiteId, setEditingSiteId] = useState(null);
@@ -70,6 +76,7 @@ const UserManager = () => {
         } else {
             setExpandedClientId(clientId);
             setEditingSiteId(null);
+            setEditingHqId(null);
         }
     };
 
@@ -85,6 +92,13 @@ const UserManager = () => {
         setEditSiteName('');
         setEditSiteLocation('');
         setEditSiteTax('');
+    };
+
+    const saveHqDetails = async (clientId) => {
+        setIsSavingHq(true);
+        await updateClientProfile(clientId, editHqCompany, editHqEmail);
+        setIsSavingHq(false);
+        setEditingHqId(null);
     };
 
     const saveSiteDetails = async (clientId, siteId) => {
@@ -264,10 +278,33 @@ const UserManager = () => {
                                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px' }}>
                                                     {/* Primary HQ Always Exhibited */}
                                                     <div style={{ background: 'rgba(0,179,255,0.05)', border: '1px solid rgba(0,179,255,0.2)', padding: '12px', borderRadius: '6px' }}>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#00b3ff', fontWeight: 'bold', marginBottom: '6px' }}>
-                                                            <MapPin size={16} /> {client.company} (Primary HQ)
-                                                        </div>
-                                                        <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Default Routing Node</div>
+                                                        {editingHqId === client.id ? (
+                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                                <input type="text" className="form-control" style={{ padding: '6px 8px', fontSize: '0.9rem' }} placeholder="Company Name" value={editHqCompany} onChange={e => setEditHqCompany(e.target.value)} />
+                                                                <input type="email" className="form-control" style={{ padding: '6px 8px', fontSize: '0.9rem' }} placeholder="Admin Email" value={editHqEmail} onChange={e => setEditHqEmail(e.target.value)} />
+                                                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' }}>
+                                                                    <button onClick={() => saveHqDetails(client.id)} className="btn-primary" style={{ padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.85rem' }} disabled={isSavingHq}>
+                                                                        <Save size={14} /> {isSavingHq ? 'Saving' : 'Save'}
+                                                                    </button>
+                                                                    <button onClick={() => setEditingHqId(null)} className="btn-secondary" style={{ padding: '6px' }}>
+                                                                        <X size={14} />
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <>
+                                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#00b3ff', fontWeight: 'bold', marginBottom: '6px' }}>
+                                                                        <MapPin size={16} /> {client.company} (Primary HQ)
+                                                                    </div>
+                                                                    <button onClick={() => { setEditingHqId(client.id); setEditHqCompany(client.company); setEditHqEmail(client.email); }} style={{ background: 'none', border: 'none', color: '#00b3ff', cursor: 'pointer', padding: '4px' }}>
+                                                                        <Edit2 size={14} />
+                                                                    </button>
+                                                                </div>
+                                                                <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '4px' }}>{client.email}</div>
+                                                                <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Default Routing Node</div>
+                                                            </>
+                                                        )}
                                                     </div>
 
                                                     {/* Registered Sites */}
