@@ -962,7 +962,7 @@ const JobManager = () => {
                     <div className="print-header">
                         <div>
                             {/* Dummy SVG Logo for printing purposes */}
-                            <svg width="180" height="40" viewBox="0 0 180 40" xmlns="http://www.w3.org/2000/svg">
+                            <svg width="350" height="40" viewBox="0 0 350 40" xmlns="http://www.w3.org/2000/svg">
                                 <text x="0" y="28" fontFamily="Outfit, sans-serif" fontSize="28" fontWeight="800" fill="#050508">ALLTECH INSTALL</text>
                             </svg>
                             <div style={{ marginTop: '12px', color: '#555', fontSize: '0.95rem', lineHeight: '1.4' }}>
