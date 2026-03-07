@@ -631,17 +631,19 @@ export const AdminProvider = ({ children }) => {
         const targetJob = targetUser?.jobs.find(j => j.id === jobId);
 
         let applicableTaxRate = 0;
-        if (targetUser && targetJob?.meta?.location) {
-            const isPrimaryHQ = targetJob.meta.location === `${targetUser.company} (Primary HQ)`;
-            if (!isPrimaryHQ) {
+        if (targetUser) {
+            const jobLocation = targetJob?.meta?.location || `${targetUser.company} (Primary HQ)`;
+            const isPrimaryHQ = jobLocation === `${targetUser.company} (Primary HQ)` || jobLocation === 'Primary HQ';
+
+            if (isPrimaryHQ && targetUser.taxRate > 0) {
+                applicableTaxRate = parseFloat(targetUser.taxRate);
+            } else if (!isPrimaryHQ) {
                 const matchedSite = targetUser.sites?.find(
-                    s => `${s.companyName} - ${s.location}` === targetJob.meta.location
+                    s => `${s.companyName} - ${s.location}` === jobLocation
                 );
                 if (matchedSite && matchedSite.taxRate) {
                     applicableTaxRate = parseFloat(matchedSite.taxRate);
                 }
-            } else if (targetUser.taxRate > 0) {
-                applicableTaxRate = parseFloat(targetUser.taxRate);
             }
         }
 
