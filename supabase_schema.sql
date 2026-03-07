@@ -6,6 +6,7 @@ create table profiles (
   id uuid references auth.users on delete cascade primary key,
   company text not null,
   email text not null,
+  tax_rate numeric default 0,
   is_temporary_password boolean default true,
   role text default 'client'
 );

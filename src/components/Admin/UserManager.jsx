@@ -17,6 +17,7 @@ const UserManager = () => {
     const [editingHqId, setEditingHqId] = useState(null);
     const [editHqCompany, setEditHqCompany] = useState('');
     const [editHqEmail, setEditHqEmail] = useState('');
+    const [editHqTax, setEditHqTax] = useState('');
     const [isSavingHq, setIsSavingHq] = useState(false);
 
     // Site Editing State
@@ -96,7 +97,7 @@ const UserManager = () => {
 
     const saveHqDetails = async (clientId) => {
         setIsSavingHq(true);
-        await updateClientProfile(clientId, editHqCompany, editHqEmail);
+        await updateClientProfile(clientId, editHqCompany, editHqEmail, editHqTax);
         setIsSavingHq(false);
         setEditingHqId(null);
     };
@@ -282,6 +283,7 @@ const UserManager = () => {
                                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                                                 <input type="text" className="form-control" style={{ padding: '6px 8px', fontSize: '0.9rem' }} placeholder="Company Name" value={editHqCompany} onChange={e => setEditHqCompany(e.target.value)} />
                                                                 <input type="email" className="form-control" style={{ padding: '6px 8px', fontSize: '0.9rem' }} placeholder="Admin Email" value={editHqEmail} onChange={e => setEditHqEmail(e.target.value)} />
+                                                                <input type="number" step="0.01" className="form-control" style={{ padding: '6px 8px', fontSize: '0.9rem' }} placeholder="Tax %" value={editHqTax} onChange={e => setEditHqTax(e.target.value)} />
                                                                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' }}>
                                                                     <button onClick={() => saveHqDetails(client.id)} className="btn-primary" style={{ padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.85rem' }} disabled={isSavingHq}>
                                                                         <Save size={14} /> {isSavingHq ? 'Saving' : 'Save'}
@@ -297,12 +299,17 @@ const UserManager = () => {
                                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#00b3ff', fontWeight: 'bold', marginBottom: '6px' }}>
                                                                         <MapPin size={16} /> {client.company} (Primary HQ)
                                                                     </div>
-                                                                    <button onClick={() => { setEditingHqId(client.id); setEditHqCompany(client.company); setEditHqEmail(client.email); }} style={{ background: 'none', border: 'none', color: '#00b3ff', cursor: 'pointer', padding: '4px' }}>
+                                                                    <button onClick={() => { setEditingHqId(client.id); setEditHqCompany(client.company); setEditHqEmail(client.email); setEditHqTax(client.taxRate || 0); }} style={{ background: 'none', border: 'none', color: '#00b3ff', cursor: 'pointer', padding: '4px' }}>
                                                                         <Edit2 size={14} />
                                                                     </button>
                                                                 </div>
                                                                 <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '4px' }}>{client.email}</div>
-                                                                <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Default Routing Node</div>
+                                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                                    <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Default Routing Node</div>
+                                                                    <div style={{ color: client.taxRate > 0 ? '#ff007f' : 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 'bold', background: client.taxRate > 0 ? 'rgba(255,0,127,0.1)' : 'transparent', padding: '2px 6px', borderRadius: '4px' }}>
+                                                                        {client.taxRate}% Tax
+                                                                    </div>
+                                                                </div>
                                                             </>
                                                         )}
                                                     </div>

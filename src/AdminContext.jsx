@@ -171,6 +171,7 @@ export const AdminProvider = ({ children }) => {
                         id: profile.id,
                         company: profile.company,
                         email: profile.email,
+                        taxRate: profile.tax_rate !== null ? Number(profile.tax_rate) : 0,
                         isTemporaryPassword: profile.is_temporary_password,
                         role: profile.role,
                         parentClientId: profile.parent_client_id,
@@ -374,6 +375,7 @@ export const AdminProvider = ({ children }) => {
                     id: newProfile.id,
                     company: newProfile.company,
                     email: newProfile.email,
+                    taxRate: 0,
                     isTemporaryPassword: newProfile.is_temporary_password,
                     role: newProfile.role,
                     parentClientId: null,
@@ -387,10 +389,11 @@ export const AdminProvider = ({ children }) => {
         }
     };
 
-    const updateClientProfile = async (clientId, company, email) => {
-        const { error } = await supabase.from('profiles').update({ company, email }).eq('id', clientId);
+    const updateClientProfile = async (clientId, company, email, taxRate) => {
+        const parsedTax = taxRate !== '' ? parseFloat(taxRate) : 0;
+        const { error } = await supabase.from('profiles').update({ company, email, tax_rate: parsedTax }).eq('id', clientId);
         if (!error) {
-            setUsers(prev => prev.map(u => u.id === clientId ? { ...u, company, email } : u));
+            setUsers(prev => prev.map(u => u.id === clientId ? { ...u, company, email, taxRate: parsedTax } : u));
         } else {
             console.error("Failed to update client profile:", error);
         }
@@ -428,6 +431,7 @@ export const AdminProvider = ({ children }) => {
                     id: newProfile.id,
                     company: newProfile.company,
                     email: newProfile.email,
+                    taxRate: 0,
                     isTemporaryPassword: newProfile.is_temporary_password,
                     role: newProfile.role,
                     parentClientId: newProfile.parent_client_id,
@@ -636,6 +640,8 @@ export const AdminProvider = ({ children }) => {
                 if (matchedSite && matchedSite.taxRate) {
                     applicableTaxRate = parseFloat(matchedSite.taxRate);
                 }
+            } else if (targetUser.taxRate > 0) {
+                applicableTaxRate = parseFloat(targetUser.taxRate);
             }
         }
 
