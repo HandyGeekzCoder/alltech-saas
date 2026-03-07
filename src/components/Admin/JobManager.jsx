@@ -108,6 +108,7 @@ const JobManager = () => {
     const [isEditing, setIsEditing] = useState(false);
     const [editLocation, setEditLocation] = useState('');
     const [editRequestedBy, setEditRequestedBy] = useState('');
+    const [editInvoiceRef, setEditInvoiceRef] = useState('');
     const [editStatus, setEditStatus] = useState('');
     const [isSavingDetails, setIsSavingDetails] = useState(false);
 
@@ -117,6 +118,7 @@ const JobManager = () => {
             setIsEditing(false);
             setEditLocation(selectedJob.meta?.location || '');
             setEditRequestedBy(selectedJob.meta?.requested_by || '');
+            setEditInvoiceRef(selectedJob.meta?.invoice_ref || '');
             setEditStatus(selectedJob.status || 'Active');
             setNewTaskTitle('');
             setNewTaskWeight('');
@@ -128,7 +130,7 @@ const JobManager = () => {
     const handleSaveDetails = async () => {
         if (!selectedJob) return;
         setIsSavingDetails(true);
-        await updateJobDetails(activeJobUserId, selectedJobId, editLocation, editRequestedBy);
+        await updateJobDetails(activeJobUserId, selectedJobId, editLocation, editRequestedBy, editInvoiceRef);
         // Only trigger status update if it actually changed
         if (editStatus !== selectedJob.status) {
             await updateJobStatus(activeJobUserId, selectedJobId, editStatus);
@@ -199,6 +201,30 @@ const JobManager = () => {
             setChargeAmount('');
             setChargeQty(1);
         }
+    };
+
+    const handleRecordPayment = () => {
+        const amountStr = window.prompt("Enter payment/deposit amount (USD):", "0.00");
+        if (!amountStr) return;
+
+        const amount = parseFloat(amountStr);
+        if (isNaN(amount) || amount <= 0) {
+            alert("Invalid payment amount. Please enter a positive number.");
+            return;
+        }
+
+        const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        setStagedItems(prev => [
+            ...prev,
+            {
+                id: `draft_${Date.now()}`,
+                description: `Payment Received - ${dateStr}`,
+                amount: -Math.abs(amount),
+                quantity: 1
+            }
+        ]);
+        setSuccessMsg('Payment staged for invoice.');
+        setTimeout(() => setSuccessMsg(''), 3000);
     };
 
     const removeStagedItem = (draftId) => {
@@ -521,6 +547,16 @@ const JobManager = () => {
                                 {isEditing ? (
                                     <>
                                         <div>
+                                            <span className="text-muted" style={{ fontSize: 'var(--text-sm)', display: 'block', marginBottom: '4px' }}>Invoice Ref</span>
+                                            <input
+                                                type="text"
+                                                className="form-control"
+                                                style={{ padding: '6px', fontSize: '14px', textTransform: 'uppercase' }}
+                                                value={editInvoiceRef}
+                                                onChange={(e) => setEditInvoiceRef(e.target.value.toUpperCase())}
+                                            />
+                                        </div>
+                                        <div>
                                             <span className="text-muted" style={{ fontSize: 'var(--text-sm)', display: 'block', marginBottom: '4px' }}>Requested By</span>
                                             <input
                                                 type="text"
@@ -571,6 +607,12 @@ const JobManager = () => {
                                     </>
                                 ) : (
                                     <>
+                                        {selectedJob.meta?.invoice_ref && (
+                                            <div>
+                                                <span className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>Invoice Ref</span>
+                                                <div style={{ color: '#fff', fontWeight: '500' }}>{selectedJob.meta.invoice_ref}</div>
+                                            </div>
+                                        )}
                                         {selectedJob.meta?.requested_by && (
                                             <div>
                                                 <span className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>Requested By</span>
@@ -798,6 +840,15 @@ const JobManager = () => {
                                 </button>
                             </form>
 
+                            <button
+                                type="button"
+                                onClick={handleRecordPayment}
+                                className="btn-secondary"
+                                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: 'var(--sp-2)', borderColor: '#00ff64', color: '#00ff64' }}
+                            >
+                                <DollarSign size={18} /> Record Payment / Deposit
+                            </button>
+
                             {/* Pending Staged Invoice List */}
                             {stagedItems.length > 0 && (
                                 <div style={{ marginTop: 'var(--sp-6)', background: 'rgba(255, 0, 127, 0.05)', padding: 'var(--sp-4)', borderRadius: '8px', border: '1px solid rgba(255, 0, 127, 0.2)' }}>
@@ -867,7 +918,7 @@ const JobManager = () => {
                         </div>
                         <div className="print-meta" style={{ textAlign: 'right' }}>
                             <h2 style={{ color: '#222', margin: '0 0 8px 0', fontSize: '2.5rem', textTransform: 'uppercase', letterSpacing: '2px' }}>Invoice</h2>
-                            <div style={{ fontWeight: 'bold', fontSize: '1.2rem', marginBottom: '4px', color: '#7000ff' }}>INV-{selectedJob.id.split('-')[0].toUpperCase()}</div>
+                            <div style={{ fontWeight: 'bold', fontSize: '1.2rem', marginBottom: '4px', color: '#7000ff' }}>INV-{selectedJob.meta?.invoice_ref || selectedJob.id.split('-')[0].toUpperCase()}</div>
                             <div style={{ color: '#555' }}>Date: {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
                         </div>
                     </div>

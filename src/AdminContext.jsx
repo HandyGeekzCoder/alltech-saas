@@ -535,6 +535,7 @@ export const AdminProvider = ({ children }) => {
         const actingUser = users.find(u => u.id === userId);
         const targetUserId = actingUser?.parentClientId || userId;
 
+        const invoiceRef = Math.random().toString(36).substring(2, 8).toUpperCase();
         const newJob = {
             id: `JOB-${Math.floor(1000 + Math.random() * 9000)}`,
             user_id: targetUserId,
@@ -542,7 +543,7 @@ export const AdminProvider = ({ children }) => {
             status: 'Pending Review',
             progress: 0,
             date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-            meta: { urgency, location, details, requested_by: actingUser?.company }
+            meta: { urgency, location, details, requested_by: actingUser?.company, invoice_ref: invoiceRef }
         };
 
         // UI Optimistic
@@ -580,7 +581,7 @@ export const AdminProvider = ({ children }) => {
         await supabase.from('jobs').update({ meta: { ...currentMeta, adminNotes: notes } }).eq('id', jobId);
     };
 
-    const updateJobDetails = async (userId, jobId, newLocation, newRequestedBy) => {
+    const updateJobDetails = async (userId, jobId, newLocation, newRequestedBy, newInvoiceRef) => {
         // UI Optimistic Update
         setUsers(prev => prev.map(user => {
             if (user.id === userId) {
@@ -589,7 +590,7 @@ export const AdminProvider = ({ children }) => {
                     jobs: user.jobs.map(job =>
                         job.id === jobId ? {
                             ...job,
-                            meta: { ...job.meta, location: newLocation, requested_by: newRequestedBy }
+                            meta: { ...job.meta, location: newLocation, requested_by: newRequestedBy, invoice_ref: newInvoiceRef }
                         } : job
                     )
                 };
@@ -602,7 +603,7 @@ export const AdminProvider = ({ children }) => {
         const currentMeta = jobData?.meta || {};
 
         // Push merged JSONB to DB
-        await supabase.from('jobs').update({ meta: { ...currentMeta, location: newLocation, requested_by: newRequestedBy } }).eq('id', jobId);
+        await supabase.from('jobs').update({ meta: { ...currentMeta, location: newLocation, requested_by: newRequestedBy, invoice_ref: newInvoiceRef } }).eq('id', jobId);
     };
 
     const updateJobStatus = async (userId, jobId, newStatus) => {
