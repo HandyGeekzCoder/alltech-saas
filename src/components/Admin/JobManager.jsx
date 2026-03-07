@@ -858,31 +858,31 @@ const JobManager = () => {
                                 <text x="0" y="28" fontFamily="Outfit, sans-serif" fontSize="28" fontWeight="800" fill="#050508">ALLTECH</text>
                                 <text x="118" y="28" fontFamily="Outfit, sans-serif" fontSize="28" fontWeight="300" fill="#7000ff">SaaS</text>
                             </svg>
-                            <div style={{ marginTop: '8px', color: '#555', fontSize: '0.9rem' }}>
+                            <div style={{ marginTop: '12px', color: '#555', fontSize: '0.95rem', lineHeight: '1.4' }}>
                                 123 Tech Boulevard<br />
                                 Suite 400<br />
                                 Innovation City, IN 40291<br />
                                 billing@alltech-saas.com
                             </div>
                         </div>
-                        <div className="print-meta">
-                            <h2 style={{ color: '#222', margin: '0 0 8px 0', fontSize: '2rem', textTransform: 'uppercase' }}>Invoice</h2>
-                            <div style={{ fontWeight: 'bold', fontSize: '1.2rem', marginBottom: '4px' }}>INV-{selectedJob.id.split('-')[0].toUpperCase()}</div>
-                            <div>Date: {new Date().toLocaleDateString()}</div>
-                            <div style={{ marginTop: '16px' }}>
-                                <strong style={{ color: '#222', display: 'block', marginBottom: '4px' }}>Billed To:</strong>
-                                <div>{realSelectedUser?.company}</div>
-                                <div>{selectedJob.meta?.requested_by || 'Client Agent'}</div>
-                                <div style={{ maxWidth: '200px', marginLeft: 'auto' }}>
-                                    {selectedJob.meta?.location || 'Primary HQ'}
-                                </div>
-                            </div>
+                        <div className="print-meta" style={{ textAlign: 'right' }}>
+                            <h2 style={{ color: '#222', margin: '0 0 8px 0', fontSize: '2.5rem', textTransform: 'uppercase', letterSpacing: '2px' }}>Invoice</h2>
+                            <div style={{ fontWeight: 'bold', fontSize: '1.2rem', marginBottom: '4px', color: '#7000ff' }}>INV-{selectedJob.id.split('-')[0].toUpperCase()}</div>
+                            <div style={{ color: '#555' }}>Date: {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
                         </div>
                     </div>
 
-                    <div style={{ marginBottom: '24px', padding: '16px', background: '#f8f9fa', borderLeft: '4px solid #7000ff' }}>
-                        <h3 style={{ margin: '0 0 4px 0', color: '#333' }}>Project Reference</h3>
-                        <div style={{ fontSize: '1.1rem', fontWeight: '500', color: '#555' }}>{selectedJob.title}</div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '32px' }}>
+                        <div>
+                            <strong style={{ color: '#222', display: 'block', marginBottom: '8px', fontSize: '1.1rem', borderBottom: '2px solid #eee', paddingBottom: '4px' }}>Billed To:</strong>
+                            <div style={{ fontWeight: 'bold', fontSize: '1.2rem', color: '#000' }}>{realSelectedUser?.company}</div>
+                            <div style={{ color: '#555', marginTop: '4px', fontStyle: 'italic' }}>ATTN: {selectedJob.meta?.requested_by || 'Client Agent'}</div>
+                            <div style={{ color: '#555' }}>{selectedJob.meta?.location || 'Primary HQ'}</div>
+                        </div>
+                        <div style={{ textAlign: 'right', minWidth: '300px' }}>
+                            <strong style={{ color: '#222', display: 'block', marginBottom: '8px', fontSize: '1.1rem', borderBottom: '2px solid #eee', paddingBottom: '4px' }}>Project Reference:</strong>
+                            <div style={{ fontSize: '1.1rem', fontWeight: '500', color: '#000' }}>{selectedJob.title}</div>
+                        </div>
                     </div>
 
                     <table className="print-table">

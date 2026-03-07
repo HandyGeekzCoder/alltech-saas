@@ -356,42 +356,58 @@ img {
     .print-table {
         width: 100%;
         border-collapse: collapse;
-        margin-top: 20px;
+        margin-top: 30px;
+        margin-bottom: 30px;
     }
 
     .print-table th {
-        background: #f8f9fa !important;
-        border-bottom: 2px solid #ddd;
+        background-color: #f8f9fa !important;
+        border-bottom: 2px solid #000 !important;
         padding: 12px;
         text-align: left;
-        color: #333;
+        color: #000 !important;
         font-weight: bold;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
     }
 
     .print-table td {
         padding: 12px;
-        border-bottom: 1px solid #eee;
-        color: #222;
+        border-bottom: 1px solid #ddd !important;
+        color: #000 !important;
+    }
+
+    .print-table tbody tr:nth-child(even) {
+        background-color: #fcfcfc !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .print-table tr {
+        page-break-inside: avoid;
     }
 
     .print-totals {
-        margin-top: 30px;
+        margin-top: 20px;
         float: right;
-        min-width: 320px;
+        min-width: 350px;
+        page-break-inside: avoid;
     }
 
     .print-totals-row {
         display: flex;
         justify-content: space-between;
-        padding: 8px 0;
-        border-bottom: 1px solid #eee;
+        padding: 8px 12px;
+        border-bottom: 1px solid #ddd !important;
+        color: #000 !important;
     }
 
     .print-totals-row.grand-total {
         font-size: 1.25rem;
         font-weight: bold;
-        border-top: 2px solid #333;
-        border-bottom: none;
+        border-top: 2px solid #000 !important;
+        border-bottom: none !important;
         padding-top: 12px;
+        padding-bottom: 0;
     }
 }
