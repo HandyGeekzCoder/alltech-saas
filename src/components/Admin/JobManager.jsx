@@ -1,9 +1,9 @@
 import React, { useContext, useState } from 'react';
 import { AdminContext } from '../../AdminContext';
-import { Target, CheckCircle2, Circle, Trash2, PlusCircle, ServerCog, Activity, Clock, DollarSign, Printer } from 'lucide-react';
+import { Target, CheckCircle2, Circle, Trash2, PlusCircle, ServerCog, Activity, Clock, DollarSign, Printer, Plus, Minus } from 'lucide-react';
 
 const JobManager = () => {
-    const { users, addTaskToJob, toggleTaskCompletion, deleteTaskFromJob, updateJobNotes, updateJobDetails, updateJobStatus, billingCatalog, taskCatalog, addBatchInvoiceToJob, deleteInvoiceItems, archiveCurrentInvoice } = useContext(AdminContext);
+    const { users, addTaskToJob, toggleTaskCompletion, updateTaskQuantity, deleteTaskFromJob, updateJobNotes, updateJobDetails, updateJobStatus, billingCatalog, taskCatalog, addBatchInvoiceToJob, deleteInvoiceItems, archiveCurrentInvoice } = useContext(AdminContext);
 
     const usersWithJobs = users.filter(user => !user.parentClientId && user.jobs && user.jobs.length > 0);
 
@@ -505,20 +505,42 @@ const JobManager = () => {
                                             transition: 'all 0.2sease'
                                         }}
                                     >
-                                        <button
-                                            onClick={() => toggleTaskCompletion(activeJobUserId, selectedJobId, task.id)}
-                                            style={{
-                                                background: 'none',
-                                                border: 'none',
-                                                color: task.isCompleted ? '#00ff64' : 'var(--text-muted)',
-                                                cursor: 'pointer',
-                                                padding: 0,
-                                                display: 'flex',
-                                                alignItems: 'center'
-                                            }}
-                                        >
-                                            {task.isCompleted ? <CheckCircle2 size={24} /> : <Circle size={24} />}
-                                        </button>
+                                        {(!task.quantity || task.quantity <= 1) ? (
+                                            <button
+                                                onClick={() => toggleTaskCompletion(activeJobUserId, selectedJobId, task.id)}
+                                                style={{
+                                                    background: 'none',
+                                                    border: 'none',
+                                                    color: task.isCompleted ? '#00ff64' : 'var(--text-muted)',
+                                                    cursor: 'pointer',
+                                                    padding: 0,
+                                                    display: 'flex',
+                                                    alignItems: 'center'
+                                                }}
+                                            >
+                                                {task.isCompleted ? <CheckCircle2 size={24} /> : <Circle size={24} />}
+                                            </button>
+                                        ) : (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.3)', padding: '4px 8px', borderRadius: '24px', border: `1px solid ${task.isCompleted ? '#00ff64' : 'rgba(255, 255, 255, 0.1)'}` }}>
+                                                <button
+                                                    onClick={() => updateTaskQuantity(activeJobUserId, selectedJobId, task.id, false)}
+                                                    style={{ background: 'none', border: 'none', color: (task.completed_qty > 0) ? '#ff4444' : 'var(--text-muted)', cursor: (task.completed_qty > 0) ? 'pointer' : 'not-allowed', padding: '2px', display: 'flex' }}
+                                                    disabled={!task.completed_qty || task.completed_qty <= 0}
+                                                >
+                                                    <Minus size={16} />
+                                                </button>
+                                                <span style={{ color: task.isCompleted ? '#00ff64' : '#fff', fontWeight: 'bold', fontSize: '0.9rem', minWidth: '32px', textAlign: 'center' }}>
+                                                    {task.completed_qty || 0} / {task.quantity}
+                                                </span>
+                                                <button
+                                                    onClick={() => updateTaskQuantity(activeJobUserId, selectedJobId, task.id, true)}
+                                                    style={{ background: 'none', border: 'none', color: task.isCompleted ? 'var(--text-muted)' : '#00b3ff', cursor: task.isCompleted ? 'not-allowed' : 'pointer', padding: '2px', display: 'flex' }}
+                                                    disabled={task.isCompleted}
+                                                >
+                                                    <Plus size={16} />
+                                                </button>
+                                            </div>
+                                        )}
 
                                         <span style={{
                                             flex: 1,

@@ -42,14 +42,17 @@ export const calculateJobProgress = (tasks) => {
     const remainingWeight = 100 - claimedWeight;
     const defaultWeightPerTask = unweightedTasks.length > 0 ? (remainingWeight / unweightedTasks.length) : 0;
 
-    // Calculate earned progress from completed items
+    // Calculate earned progress from fractional completion
     tasks.forEach(t => {
-        if (t.isCompleted) {
-            if (t.weight !== null && t.weight > 0) {
-                totalProgress += t.weight;
-            } else {
-                totalProgress += defaultWeightPerTask;
-            }
+        const taskWeight = (t.weight !== null && t.weight > 0) ? t.weight : defaultWeightPerTask;
+        const taskQty = t.quantity || 1;
+        const completionRatio = Math.min(1, Math.max(0, (t.completed_qty || 0) / taskQty));
+
+        // Backward compatibility for old DB tasks
+        if (t.isCompleted || t.is_completed) {
+            totalProgress += taskWeight;
+        } else {
+            totalProgress += (taskWeight * completionRatio);
         }
     });
 
@@ -874,31 +877,30 @@ export const AdminProvider = ({ children }) => {
 
     const addTaskToJob = async (userId, jobId, title, customWeight = null, quantity = 1) => {
         const q = parseInt(quantity, 10) || 1;
-        const newTasksForDB = [];
-        const newTasksForUI = [];
+        const parsedWeight = customWeight ? parseFloat(customWeight) : null;
 
-        for (let i = 0; i < q; i++) {
-            const uid = `tsk_${Date.now()}_${i}_${Math.random().toString(36).substr(2, 9)}`;
-            const taskTitle = q > 1 ? `${title} ${i + 1}/${q}` : title;
-            const parsedWeight = customWeight ? parseFloat(customWeight) : null;
+        const uid = `tsk_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-            newTasksForDB.push({
-                id: uid,
-                job_id: jobId,
-                title: taskTitle,
-                is_completed: false,
-                weight: parsedWeight
-            });
+        const newDBTask = {
+            id: uid,
+            job_id: jobId,
+            title: title,
+            is_completed: false,
+            weight: parsedWeight,
+            quantity: q,
+            completed_qty: 0
+        };
 
-            newTasksForUI.push({
-                id: uid,
-                title: taskTitle,
-                isCompleted: false,
-                weight: parsedWeight
-            });
-        }
+        const newUITask = {
+            id: uid,
+            title: title,
+            isCompleted: false,
+            weight: parsedWeight,
+            quantity: q,
+            completed_qty: 0
+        };
 
-        await supabase.from('tasks').insert(newTasksForDB);
+        await supabase.from('tasks').insert([newDBTask]);
 
         setUsers(prev => prev.map(user => {
             if (user.id === userId) {
@@ -906,7 +908,7 @@ export const AdminProvider = ({ children }) => {
                     if (job.id === jobId) {
                         const newTasks = [
                             ...(job.tasks || []),
-                            ...newTasksForUI
+                            newUITask
                         ];
                         // Recalculate progress
                         const newProgress = calculateJobProgress(newTasks);
@@ -925,6 +927,7 @@ export const AdminProvider = ({ children }) => {
 
     const toggleTaskCompletion = async (userId, jobId, taskId) => {
         let newIsCompleted = false;
+        let newCompletedQty = 0;
 
         setUsers(prev => prev.map(user => {
             if (user.id === userId) {
@@ -933,7 +936,8 @@ export const AdminProvider = ({ children }) => {
                         const newTasks = (job.tasks || []).map(t => {
                             if (t.id === taskId) {
                                 newIsCompleted = !t.isCompleted;
-                                return { ...t, isCompleted: newIsCompleted };
+                                newCompletedQty = newIsCompleted ? (t.quantity || 1) : 0;
+                                return { ...t, isCompleted: newIsCompleted, completed_qty: newCompletedQty };
                             }
                             return t;
                         });
@@ -951,7 +955,55 @@ export const AdminProvider = ({ children }) => {
                         // Fire-and-forget sync wrapper
                         const syncJobStats = async () => {
                             await supabase.from('jobs').update({ progress: newProgress, status: newStatus }).eq('id', jobId);
-                            await supabase.from('tasks').update({ is_completed: newIsCompleted }).eq('id', taskId);
+                            await supabase.from('tasks').update({ is_completed: newIsCompleted, completed_qty: newCompletedQty }).eq('id', taskId);
+                        };
+                        syncJobStats();
+
+                        return { ...job, tasks: newTasks, progress: newProgress, status: newStatus };
+                    }
+                    return job;
+                });
+                return { ...user, jobs: updatedJobs };
+            }
+            return user;
+        }));
+    };
+
+    const updateTaskQuantity = async (userId, jobId, taskId, increment = true) => {
+        let finalQty = 0;
+        let finalIsCompleted = false;
+
+        setUsers(prev => prev.map(user => {
+            if (user.id === userId) {
+                const updatedJobs = user.jobs.map(job => {
+                    if (job.id === jobId) {
+                        const newTasks = (job.tasks || []).map(t => {
+                            if (t.id === taskId) {
+                                const targetQty = t.quantity || 1;
+                                let currentQty = t.completed_qty || 0;
+
+                                if (increment && currentQty < targetQty) currentQty += 1;
+                                else if (!increment && currentQty > 0) currentQty -= 1;
+
+                                finalQty = currentQty;
+                                finalIsCompleted = currentQty === targetQty;
+
+                                return { ...t, completed_qty: finalQty, isCompleted: finalIsCompleted };
+                            }
+                            return t;
+                        });
+
+                        const newProgress = calculateJobProgress(newTasks);
+                        let newStatus = job.status;
+                        if (newProgress === 100) {
+                            newStatus = 'Completed';
+                        } else if (newStatus === 'Completed' && newProgress < 100) {
+                            newStatus = 'Active';
+                        }
+
+                        const syncJobStats = async () => {
+                            await supabase.from('jobs').update({ progress: newProgress, status: newStatus }).eq('id', jobId);
+                            await supabase.from('tasks').update({ completed_qty: finalQty, is_completed: finalIsCompleted }).eq('id', taskId);
                         };
                         syncJobStats();
 
@@ -999,7 +1051,7 @@ export const AdminProvider = ({ children }) => {
             deleteInvoiceItems, archiveCurrentInvoice,
             taskCatalog, addTaskCatalogItem, updateTaskCatalogItem, deleteTaskCatalogItem,
             addCatalogItem, updateCatalogItem, deleteCatalogItem,
-            addTaskToJob, toggleTaskCompletion, deleteTaskFromJob, updateJobStatus,
+            addTaskToJob, toggleTaskCompletion, updateTaskQuantity, deleteTaskFromJob, updateJobStatus,
             addClientAccount, updateClientProfile, updateClientPassword, addJobToAccount, updateJobNotes, updateJobDetails,
             addSiteToAccount, deleteSiteFromAccount, updateSiteDetails, addEmployeeToClient,
             isLoading

@@ -28,7 +28,9 @@ create table tasks (
   job_id text references jobs(id) on delete cascade not null,
   title text not null,
   is_completed boolean default false,
-  weight numeric
+  weight numeric,
+  quantity numeric default 1,
+  completed_qty numeric default 0
 );
 
 -- LINE ITEMS
