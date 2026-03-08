@@ -113,6 +113,10 @@ const JobManager = () => {
     const [editStatus, setEditStatus] = useState('');
     const [isSavingDetails, setIsSavingDetails] = useState(false);
 
+    const [showPaymentModal, setShowPaymentModal] = useState(false);
+    const [paymentMethod, setPaymentMethod] = useState('Check');
+    const [paymentRef, setPaymentRef] = useState('');
+
     React.useEffect(() => {
         if (selectedJob) {
             setAdminNotes(selectedJob.meta?.adminNotes || '');
@@ -126,6 +130,9 @@ const JobManager = () => {
             setNewTaskWeight('');
             setNewTaskQuantity(1);
             setSelectedTaskCatalogId('');
+            setShowPaymentModal(false);
+            setPaymentMethod('Check');
+            setPaymentRef('');
         }
     }, [selectedJobId]);
 
@@ -219,15 +226,15 @@ const JobManager = () => {
         }
     };
 
-    const handleArchiveInvoice = () => {
+    const handleInitArchiveInvoice = () => {
         if (!selectedJob || !selectedJob.lineItems || selectedJob.lineItems.length === 0) {
             alert("No line items on the current invoice to archive.");
             return;
         }
+        setShowPaymentModal(true);
+    };
 
-        const confirmArchive = window.confirm("Are you sure you want to mark this invoice as Paid? This will permanently archive the items and generate a fresh invoice for the next billing cycle.");
-        if (!confirmArchive) return;
-
+    const handleConfirmArchiveInvoice = () => {
         // Build snapshot
         const snapshot = {
             id: selectedJob.meta?.invoice_ref || `GEN-${Date.now()}`,
@@ -235,13 +242,18 @@ const JobManager = () => {
             totalItems: selectedJob.lineItems.length,
             subtotal: Number(activeSubtotal),
             tax: Number(activeTaxAmount),
-            grandTotal: Number(activeTotal)
+            grandTotal: Number(activeTotal),
+            paymentMethod: paymentMethod,
+            paymentRef: paymentMethod === 'Check' ? paymentRef : ''
         };
 
         const itemIdsToDelete = selectedJob.lineItems.map(li => li.id);
 
         archiveCurrentInvoice(activeJobUserId, selectedJobId, snapshot, itemIdsToDelete);
-        setSuccessMsg(`Invoice ${snapshot.id} saved to archives safely!`);
+        setSuccessMsg(`Invoice ${snapshot.id} safely archived and paid!`);
+        setShowPaymentModal(false);
+        setPaymentMethod('Check');
+        setPaymentRef('');
         setTimeout(() => setSuccessMsg(''), 4000);
     };
 
@@ -772,24 +784,49 @@ const JobManager = () => {
                                             </button>
                                         )}
 
-                                        <button
-                                            onClick={handleArchiveInvoice}
-                                            className="btn-primary"
-                                            style={{
-                                                width: '100%',
-                                                marginTop: 'var(--sp-4)',
-                                                display: 'flex',
-                                                justifyContent: 'center',
-                                                alignItems: 'center',
-                                                gap: '8px',
-                                                background: 'linear-gradient(135deg, #00ff64, #00b3ff)',
-                                                color: '#08080c',
-                                                fontWeight: 'bold',
-                                                border: 'none'
-                                            }}
-                                        >
-                                            <DollarSign size={16} /> Mark Invoice Paid & Start Fresh
-                                        </button>
+                                        {!showPaymentModal ? (
+                                            <button
+                                                onClick={handleInitArchiveInvoice}
+                                                className="btn-primary"
+                                                style={{
+                                                    width: '100%',
+                                                    marginTop: 'var(--sp-4)',
+                                                    display: 'flex',
+                                                    justifyContent: 'center',
+                                                    alignItems: 'center',
+                                                    gap: '8px',
+                                                    background: 'linear-gradient(135deg, #00ff64, #00b3ff)',
+                                                    color: '#08080c',
+                                                    fontWeight: 'bold',
+                                                    border: 'none'
+                                                }}
+                                            >
+                                                <DollarSign size={16} /> Mark Invoice Paid & Start Fresh
+                                            </button>
+                                        ) : (
+                                            <div style={{ marginTop: 'var(--sp-4)', background: 'rgba(0, 255, 100, 0.05)', padding: 'var(--sp-4)', borderRadius: '8px', border: '1px solid rgba(0, 255, 100, 0.3)' }}>
+                                                <h4 style={{ color: '#00ff64', marginBottom: '12px', fontSize: '0.95rem' }}>Confirm Payment Details</h4>
+                                                <div className="form-group" style={{ marginBottom: '12px' }}>
+                                                    <label className="form-label" style={{ color: '#ccc' }}>Payment Method</label>
+                                                    <select className="form-control" value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
+                                                        <option value="Check">Check</option>
+                                                        <option value="Cash">Cash</option>
+                                                        <option value="Credit Card">Credit Card</option>
+                                                        <option value="ACH / Wire">ACH / Wire</option>
+                                                    </select>
+                                                </div>
+                                                {paymentMethod === 'Check' && (
+                                                    <div className="form-group" style={{ marginBottom: '12px' }}>
+                                                        <label className="form-label" style={{ color: '#ccc' }}>Check Number</label>
+                                                        <input type="text" className="form-control" placeholder="1234..." value={paymentRef} onChange={(e) => setPaymentRef(e.target.value)} required />
+                                                    </div>
+                                                )}
+                                                <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+                                                    <button className="btn-secondary" style={{ flex: 1 }} onClick={() => setShowPaymentModal(false)}>Cancel</button>
+                                                    <button className="btn-primary" style={{ flex: 2, background: 'linear-gradient(135deg, #00ff64, #00b3ff)', border: 'none', color: '#000', fontWeight: 'bold' }} onClick={handleConfirmArchiveInvoice}>Confirm Payment</button>
+                                                </div>
+                                            </div>
+                                        )}
 
                                         <button
                                             onClick={handlePrintInvoice}
@@ -943,6 +980,11 @@ const JobManager = () => {
                                                     <span>{inv.totalItems} Items</span>
                                                     <span>Paid: {inv.dateArchived}</span>
                                                 </div>
+                                                {inv.paymentMethod && (
+                                                    <div style={{ color: '#888', fontSize: '0.75rem', marginTop: '4px', fontStyle: 'italic' }}>
+                                                        Method: {inv.paymentMethod} {inv.paymentRef ? `(#${inv.paymentRef})` : ''}
+                                                    </div>
+                                                )}
                                             </div>
                                         ))}
                                     </div>
