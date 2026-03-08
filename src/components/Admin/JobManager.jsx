@@ -235,14 +235,20 @@ const JobManager = () => {
     };
 
     const handleConfirmArchiveInvoice = () => {
+        const regularLineItems = selectedJob.lineItems.filter(item => !item.description.startsWith('Sales Tax'));
+        const taxLineItem = selectedJob.lineItems.find(item => item.description.startsWith('Sales Tax'));
+        const calcSubtotal = regularLineItems.reduce((acc, current) => acc + (current.amount * current.quantity), 0);
+        const calcTax = taxLineItem ? taxLineItem.amount : 0;
+        const calcTotal = calcSubtotal + calcTax;
+
         // Build snapshot
         const snapshot = {
             id: selectedJob.meta?.invoice_ref || `GEN-${Date.now()}`,
             dateArchived: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
             totalItems: selectedJob.lineItems.length,
-            subtotal: Number(activeSubtotal),
-            tax: Number(activeTaxAmount),
-            grandTotal: Number(activeTotal),
+            subtotal: calcSubtotal,
+            tax: calcTax,
+            grandTotal: calcTotal,
             paymentMethod: paymentMethod,
             paymentRef: paymentMethod === 'Check' ? paymentRef : ''
         };
@@ -250,6 +256,15 @@ const JobManager = () => {
         const itemIdsToDelete = selectedJob.lineItems.map(li => li.id);
 
         archiveCurrentInvoice(activeJobUserId, selectedJobId, snapshot, itemIdsToDelete);
+
+        // Let the state update gracefully before popping the prompt
+        setTimeout(() => {
+            const openNew = window.confirm("Payment Recorded! Would you like to keep this project open and generate a new invoice sequence for next time?\n\n(Click 'Cancel' to mark the Job as Completed instead)");
+            if (!openNew) {
+                updateJobStatus(activeJobUserId, selectedJobId, 'Completed');
+            }
+        }, 100);
+
         setSuccessMsg(`Invoice ${snapshot.id} safely archived and paid!`);
         setShowPaymentModal(false);
         setPaymentMethod('Check');
