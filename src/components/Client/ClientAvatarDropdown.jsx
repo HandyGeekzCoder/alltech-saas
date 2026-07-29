@@ -5,7 +5,7 @@ import PasswordResetModal from './PasswordResetModal';
 import { useNavigate } from 'react-router-dom';
 
 const ClientAvatarDropdown = () => {
-    const { users, loggedInUserId, updateClientPassword, setLoggedInUserId } = useContext(AdminContext);
+    const { users, loggedInUserId, updateClientPassword, logoutUser } = useContext(AdminContext);
     const currentUser = users.find(u => u.id === loggedInUserId);
     const [isOpen, setIsOpen] = useState(false);
     const [isChangingPassword, setIsChangingPassword] = useState(false);
@@ -83,8 +83,8 @@ const ClientAvatarDropdown = () => {
                     </button>
 
                     <button
-                        onClick={() => {
-                            setLoggedInUserId(null);
+                        onClick={async () => {
+                            await logoutUser();
                             navigate('/');
                         }}
                         style={{

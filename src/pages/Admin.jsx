@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import AdminSidebar from '../components/Admin/AdminSidebar';
 import SiteEditor from '../components/Admin/SiteEditor';
@@ -6,9 +6,17 @@ import UserManager from '../components/Admin/UserManager';
 import CatalogManager from '../components/Admin/CatalogManager';
 import TaskCatalogManager from '../components/Admin/TaskCatalogManager';
 import JobManager from '../components/Admin/JobManager';
+import { AdminContext } from '../AdminContext';
 import '../Dashboard.css'; // Reuse dashboard layout structure
 
 const AdminLayout = () => {
+    const { users, loggedInUserId } = useContext(AdminContext);
+    const currentUser = users.find(u => u.id === loggedInUserId);
+
+    if (!loggedInUserId || currentUser?.role !== 'admin') {
+        return <Navigate to="/admin-login" replace />;
+    }
+
     return (
         <div className="dashboard-layout">
             <AdminSidebar />

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import Sidebar from '../components/Dashboard/Sidebar';
 import Overview from '../components/Dashboard/Overview';
 import JobRequest from '../components/Dashboard/JobRequest';
@@ -13,6 +13,10 @@ import '../Dashboard.css';
 const Dashboard = () => {
     const { users, loggedInUserId, updateClientPassword } = React.useContext(AdminContext);
     const currentUser = users.find(u => u.id === loggedInUserId);
+
+    if (!loggedInUserId) {
+        return <Navigate to="/login" replace />;
+    }
 
     const handlePasswordReset = (newPassword) => {
         updateClientPassword(currentUser.id, newPassword);

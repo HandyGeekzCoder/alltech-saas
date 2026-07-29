@@ -284,7 +284,10 @@ export const AdminProvider = ({ children }) => {
         await supabase.from('line_items').insert(newItem);
     };
 
-    const loginClient = async (email, password) => {
+    // Shared login for both the client portal and the admin portal.
+    // Role is looked up from the profiles table after auth succeeds, so
+    // callers can decide what a given account is allowed to see.
+    const login = async (email, password) => {
         try {
             const { data, error } = await supabase.auth.signInWithPassword({
                 email,
@@ -295,60 +298,42 @@ export const AdminProvider = ({ children }) => {
                 return { success: false, message: error.message };
             }
 
-            if (data.user) {
-                setLoggedInUserId(data.user.id);
-                // Re-fetch all data now that we are authenticated, so RLS policies allow us to see our jobs & profile!
-                await fetchRemoteData();
-                return { success: true };
+            if (!data.user) {
+                return { success: false, message: 'Invalid credentials.' };
             }
-            return { success: false, message: 'Invalid credentials.' };
+
+            const { data: profileRow, error: profileError } = await supabase
+                .from('profiles')
+                .select('role')
+                .eq('id', data.user.id)
+                .single();
+
+            if (profileError || !profileRow) {
+                await supabase.auth.signOut();
+                return { success: false, message: 'No profile found for this account.' };
+            }
+
+            setLoggedInUserId(data.user.id);
+            // Re-fetch all data now that we are authenticated, so RLS policies allow us to see our jobs & profile!
+            await fetchRemoteData();
+            return { success: true, role: profileRow.role };
         } catch (err) {
             return { success: false, message: 'Authentication failed.' };
         }
     };
 
-    const adminLogin = async () => {
-        try {
-            const adminEmail = 'admin@alltek.local';
-            const adminPass = 'SuperAdminSecure123!';
-
-            // Try explicit login
-            let { data, error } = await supabase.auth.signInWithPassword({
-                email: adminEmail,
-                password: adminPass
-            });
-
-            // Auto-provision if it doesn't exist
-            if (error && error.message.includes('Invalid login credentials')) {
-                const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-                    email: adminEmail,
-                    password: adminPass
-                });
-                if (!signUpError && signUpData.user) {
-                    await supabase.from('profiles').upsert({
-                        id: signUpData.user.id,
-                        company: 'AllTek Master Admin',
-                        email: adminEmail,
-                        role: 'admin',
-                        is_temporary_password: false
-                    });
-                    data = signUpData;
-                    error = null;
-                }
-            }
-
-            if (!error && data?.user) {
-                setLoggedInUserId(data.user.id);
-                await fetchRemoteData();
-                return { success: true };
-            }
-            return { success: false, message: 'Admin Supabase provision failed.' };
-        } catch (err) {
-            return { success: false, message: 'Admin authentication failed.' };
-        }
+    const logoutUser = async () => {
+        await supabase.auth.signOut();
+        setLoggedInUserId(null);
     };
 
     const addClientAccount = async (company, email, tempPassword) => {
+        // supabase.auth.signUp() swaps the browser's active session to the
+        // newly-created user (Supabase JS v2 behavior). Capture the admin's
+        // session first and restore it right after, so the admin stays
+        // logged in as themselves instead of becoming the new client.
+        const { data: { session: adminSession } } = await supabase.auth.getSession();
+
         // Since we disabled Email Confirmations, we can create the user and they will be auto-confirmed
         const { data: authData, error: authError } = await supabase.auth.signUp({
             email,
@@ -358,6 +343,13 @@ export const AdminProvider = ({ children }) => {
         if (authError) {
             console.error("Auth creation failed:", authError);
             return;
+        }
+
+        if (adminSession) {
+            await supabase.auth.setSession({
+                access_token: adminSession.access_token,
+                refresh_token: adminSession.refresh_token
+            });
         }
 
         if (authData?.user) {
@@ -403,6 +395,9 @@ export const AdminProvider = ({ children }) => {
     };
 
     const addEmployeeToClient = async (parentClientId, employeeName, employeeEmail, tempPassword, permissions) => {
+        // Same session-hijack guard as addClientAccount — see comment there.
+        const { data: { session: adminSession } } = await supabase.auth.getSession();
+
         // Create Supabase Auth User
         const { data: authData, error: authError } = await supabase.auth.signUp({
             email: employeeEmail,
@@ -412,6 +407,13 @@ export const AdminProvider = ({ children }) => {
         if (authError || !authData?.user) {
             console.error("Auth creation failed:", authError);
             return { error: authError };
+        }
+
+        if (adminSession) {
+            await supabase.auth.setSession({
+                access_token: adminSession.access_token,
+                refresh_token: adminSession.refresh_token
+            });
         }
 
         const newProfile = {
@@ -1046,7 +1048,7 @@ export const AdminProvider = ({ children }) => {
         <AdminContext.Provider value={{
             siteData, updateSiteData,
             users, addLineItemToJob,
-            loggedInUserId, loginClient, adminLogin,
+            loggedInUserId, login, logoutUser,
             billingCatalog, addBatchInvoiceToJob,
             deleteInvoiceItems, archiveCurrentInvoice,
             taskCatalog, addTaskCatalogItem, updateTaskCatalogItem, deleteTaskCatalogItem,

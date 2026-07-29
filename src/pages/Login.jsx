@@ -6,7 +6,7 @@ import '../Login.css';
 
 const Login = () => {
     const navigate = useNavigate();
-    const { loginClient } = useContext(AdminContext);
+    const { login } = useContext(AdminContext);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
@@ -19,7 +19,7 @@ const Login = () => {
         setError('');
 
         try {
-            const result = await loginClient(email, password);
+            const result = await login(email, password);
             if (result.success) {
                 navigate('/dashboard');
             } else {

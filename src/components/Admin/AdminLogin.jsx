@@ -6,11 +6,11 @@ import '../../Login.css';
 
 const AdminLogin = () => {
     const navigate = useNavigate();
-    const [username, setUsername] = useState('');
+    const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
 
-    const { adminLogin } = React.useContext(AdminContext);
+    const { login, logoutUser } = React.useContext(AdminContext);
     const [isLoading, setIsLoading] = useState(false);
 
     const handleLogin = async (e) => {
@@ -18,15 +18,15 @@ const AdminLogin = () => {
         setIsLoading(true);
         setError('');
 
-        if (username === 'Admin' && password === 'Admin') {
-            const result = await adminLogin();
-            if (result.success) {
-                navigate('/admin/editor');
-            } else {
-                setError(result.message);
-            }
+        const result = await login(email, password);
+        if (result.success && result.role === 'admin') {
+            navigate('/admin/editor');
+        } else if (result.success) {
+            // Valid account, but not an admin — don't leave them signed in on the admin portal.
+            await logoutUser();
+            setError('This account is not authorized for admin access.');
         } else {
-            setError('Invalid admin credentials.');
+            setError(result.message || 'Invalid admin credentials.');
         }
         setIsLoading(false);
     };
@@ -45,15 +45,15 @@ const AdminLogin = () => {
 
                 <form onSubmit={handleLogin}>
                     <div className="form-group">
-                        <label className="form-label">Admin Username</label>
+                        <label className="form-label">Admin Email</label>
                         <div style={{ position: 'relative' }}>
                             <User size={18} style={{ position: 'absolute', top: '12px', left: '12px', color: '#8c8c9a' }} />
                             <input
-                                type="text"
+                                type="email"
                                 className="form-control"
-                                placeholder="Admin"
-                                value={username}
-                                onChange={(e) => setUsername(e.target.value)}
+                                placeholder="admin@company.com"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
                                 style={{ paddingLeft: '40px' }}
                                 required
                             />

@@ -1,11 +1,17 @@
 import React, { useContext } from 'react';
-import { NavLink, Link } from 'react-router-dom';
+import { NavLink, Link, useNavigate } from 'react-router-dom';
 import { Cpu, LayoutDashboard, PlusCircle, LogOut, FileText, MapPin, Users } from 'lucide-react';
 import { AdminContext } from '../../AdminContext';
 
 const Sidebar = () => {
-    const { users, loggedInUserId } = useContext(AdminContext);
+    const { users, loggedInUserId, logoutUser } = useContext(AdminContext);
+    const navigate = useNavigate();
     const loggedInUser = users.find(u => u.id === loggedInUserId);
+
+    const handleSignOut = async () => {
+        await logoutUser();
+        navigate('/');
+    };
 
     const isEmployee = !!loggedInUser?.parentClientId;
     const canViewBilling = !isEmployee || loggedInUser?.permissions?.canViewBilling;
@@ -81,10 +87,10 @@ const Sidebar = () => {
             </nav>
 
             <div className="sidebar-footer">
-                <Link to="/" className="nav-item">
+                <button onClick={handleSignOut} className="nav-item" style={{ background: 'none', border: 'none', width: '100%', textAlign: 'left', cursor: 'pointer' }}>
                     <LogOut size={20} />
                     Sign Out
-                </Link>
+                </button>
             </div>
         </aside>
     );

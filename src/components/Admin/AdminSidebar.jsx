@@ -1,8 +1,17 @@
-import React from 'react';
-import { NavLink, Link } from 'react-router-dom';
+import React, { useContext } from 'react';
+import { NavLink, Link, useNavigate } from 'react-router-dom';
 import { Cpu, Edit, Users, LogOut, BookOpen, Target, ListTodo } from 'lucide-react';
+import { AdminContext } from '../../AdminContext';
 
 const AdminSidebar = () => {
+    const { logoutUser } = useContext(AdminContext);
+    const navigate = useNavigate();
+
+    const handleSignOut = async () => {
+        await logoutUser();
+        navigate('/');
+    };
+
     return (
         <aside className="dashboard-sidebar" style={{ borderRightColor: 'rgba(255,0,127,0.3)' }}>
             <div className="sidebar-header">
@@ -68,10 +77,10 @@ const AdminSidebar = () => {
             </nav>
 
             <div className="sidebar-footer">
-                <Link to="/" className="nav-item">
+                <button onClick={handleSignOut} className="nav-item" style={{ background: 'none', border: 'none', width: '100%', textAlign: 'left', cursor: 'pointer' }}>
                     <LogOut size={20} />
                     Exit OS
-                </Link>
+                </button>
             </div>
         </aside>
     );
