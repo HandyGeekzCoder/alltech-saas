@@ -77,6 +77,7 @@ alter table catalog enable row level security;
 alter table site_data enable row level security;
 
 -- Policies (We will refine these for security later, but for migration we allow full access to authenticated users)
+-- SUPERSEDED: see supabase_rls_fix.sql for the real per-user scoping applied on top of this.
 create policy "Enable full access for authenticated users" on profiles for all to authenticated using (true) with check (true);
 create policy "Enable full access for authenticated users" on jobs for all to authenticated using (true) with check (true);
 create policy "Enable full access for authenticated users" on tasks for all to authenticated using (true) with check (true);
