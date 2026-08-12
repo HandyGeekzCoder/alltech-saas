@@ -11,20 +11,25 @@
 --   - an admin (profiles.role = 'admin') can see/edit everything
 --   - an employee sub-account (profiles.parent_client_id set) can see/edit
 --     their parent client's rows, matching how the app already treats them
+--   - an employee is further scoped to only the SITES/JOBS listed in their
+--     own profiles.permissions->'allowedSites' (mirrors the front-end filter
+--     in AdminContext.jsx, now enforced at the database level too, closing
+--     the "any employee can read/write the whole parent tenant" gap)
 --   - catalog/task_catalog/site_data are shared reference & public site
 --     content: readable by everyone, writable by admins only
 --
 -- HOW TO APPLY: run this whole file once in the Supabase SQL editor for this
 -- project (Database > SQL Editor). It is idempotent (safe to re-run).
 --
--- KNOWN GAP NOT COVERED HERE: the app also restricts an employee to a subset
--- of their parent's *sites* via profiles.permissions->>'allowedSites', matched
--- against a job's meta->>'location' string. That finer-grained filter is only
--- enforced in the front-end today, and this migration does not attempt to
--- rebuild it in SQL — an employee account can now reach all of their parent
--- client's jobs at the database level, same as before, just no longer able to
--- reach OTHER clients' data. Flagging this so it isn't mistaken for fully
--- fixed.
+-- NOTE ON SITE SCOPING: jobs.meta->>'location' is a free-text label string
+-- ("CompanyName - Location" or "CompanyName (Primary HQ)") generated the same
+-- way on write (JobRequest.jsx / AdminContext.addJobToAccount) and on read
+-- (AdminContext's own front-end filter). This migration matches that same
+-- string server-side, so an employee only ever sees/writes jobs whose label
+-- is in their own permissions->'allowedSites' list. If that label format is
+-- ever changed on the front end without updating this migration, the failure
+-- mode is fail-closed (the employee sees nothing extra, never something they
+-- shouldn't) rather than a leak.
 -- ============================================================================
 
 -- ---------------------------------------------------------------------------
@@ -53,6 +58,46 @@ set search_path = public
 stable
 as $$
   select parent_client_id from public.profiles where id = auth.uid();
+$$;
+
+-- Every job-label string the calling employee is allowed to see, built the
+-- exact same way the front end builds them (AdminContext.jsx ~130-144):
+-- "{ParentCompany} (Primary HQ)" if 'primary-hq' is in their allowedSites,
+-- plus "{site.company_name} - {site.location}" for every site id listed in
+-- their allowedSites. Returns zero rows for non-employees, or for an
+-- employee with no permissions/allowedSites configured (fail-closed).
+create or replace function public.current_employee_allowed_locations()
+returns table(location text)
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select (parent.company || ' (Primary HQ)') as location
+  from public.profiles me
+  join public.profiles parent on parent.id = me.parent_client_id
+  where me.id = auth.uid()
+    and me.permissions -> 'allowedSites' ? 'primary-hq'
+  union all
+  select (s.company_name || ' - ' || s.location) as location
+  from public.profiles me
+  join public.sites s on s.user_id = me.parent_client_id
+  where me.id = auth.uid()
+    and me.permissions -> 'allowedSites' ? s.id::text;
+$$;
+
+-- The raw site ids the calling employee is allowed to see (used to scope the
+-- `sites` table itself, separately from the job-label matching above).
+create or replace function public.current_employee_allowed_site_ids()
+returns table(site_id text)
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select jsonb_array_elements_text(coalesce(me.permissions -> 'allowedSites', '[]'::jsonb))
+  from public.profiles me
+  where me.id = auth.uid();
 $$;
 
 -- ---------------------------------------------------------------------------
@@ -103,23 +148,43 @@ drop policy if exists "jobs_delete_admin_only" on jobs;
 create policy "jobs_select_own_or_related" on jobs
   for select to authenticated
   using (
-    user_id = auth.uid()
-    or user_id = current_parent_client_id()
-    or is_admin()
+    is_admin()
+    or user_id = auth.uid()
+    or (
+      user_id = current_parent_client_id()
+      and meta ->> 'location' in (select location from public.current_employee_allowed_locations())
+    )
   );
 
 create policy "jobs_insert_own_or_admin" on jobs
   for insert to authenticated
   with check (
-    user_id = auth.uid()
-    or user_id = current_parent_client_id()
-    or is_admin()
+    is_admin()
+    or user_id = auth.uid()
+    or (
+      user_id = current_parent_client_id()
+      and meta ->> 'location' in (select location from public.current_employee_allowed_locations())
+    )
   );
 
 create policy "jobs_update_own_or_admin" on jobs
   for update to authenticated
-  using (user_id = auth.uid() or user_id = current_parent_client_id() or is_admin())
-  with check (user_id = auth.uid() or user_id = current_parent_client_id() or is_admin());
+  using (
+    is_admin()
+    or user_id = auth.uid()
+    or (
+      user_id = current_parent_client_id()
+      and meta ->> 'location' in (select location from public.current_employee_allowed_locations())
+    )
+  )
+  with check (
+    is_admin()
+    or user_id = auth.uid()
+    or (
+      user_id = current_parent_client_id()
+      and meta ->> 'location' in (select location from public.current_employee_allowed_locations())
+    )
+  );
 
 create policy "jobs_delete_admin_only" on jobs
   for delete to authenticated
@@ -142,7 +207,14 @@ create policy "tasks_select_via_job" on tasks
     exists (
       select 1 from jobs
       where jobs.id = tasks.job_id
-        and (jobs.user_id = auth.uid() or jobs.user_id = current_parent_client_id() or is_admin())
+        and (
+          is_admin()
+          or jobs.user_id = auth.uid()
+          or (
+            jobs.user_id = current_parent_client_id()
+            and jobs.meta ->> 'location' in (select location from public.current_employee_allowed_locations())
+          )
+        )
     )
   );
 
@@ -168,7 +240,14 @@ create policy "line_items_select_via_job" on line_items
     exists (
       select 1 from jobs
       where jobs.id = line_items.job_id
-        and (jobs.user_id = auth.uid() or jobs.user_id = current_parent_client_id() or is_admin())
+        and (
+          is_admin()
+          or jobs.user_id = auth.uid()
+          or (
+            jobs.user_id = current_parent_client_id()
+            and jobs.meta ->> 'location' in (select location from public.current_employee_allowed_locations())
+          )
+        )
     )
   );
 
@@ -238,7 +317,14 @@ drop policy if exists "sites_delete_own_or_admin" on sites;
 
 create policy "sites_select_own_or_related" on sites
   for select to authenticated
-  using (user_id = auth.uid() or user_id = current_parent_client_id() or is_admin());
+  using (
+    is_admin()
+    or user_id = auth.uid()
+    or (
+      user_id = current_parent_client_id()
+      and id::text in (select site_id from public.current_employee_allowed_site_ids())
+    )
+  );
 
 create policy "sites_insert_own_or_admin" on sites
   for insert to authenticated
