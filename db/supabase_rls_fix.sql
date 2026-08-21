@@ -128,8 +128,9 @@ begin
     if NEW.role is distinct from OLD.role
        or NEW.permissions is distinct from OLD.permissions
        or NEW.parent_client_id is distinct from OLD.parent_client_id
+       or NEW.tax_rate is distinct from OLD.tax_rate
     then
-      raise exception 'Non-admin users cannot change role, permissions, or parent_client_id';
+      raise exception 'Non-admin users cannot change role, permissions, parent_client_id, or tax_rate';
     end if;
   end if;
   return NEW;
