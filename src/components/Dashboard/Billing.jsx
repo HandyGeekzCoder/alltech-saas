@@ -54,7 +54,7 @@ const Billing = () => {
                         </thead>
                         <tbody>
                             {loggedInUser.jobs.map(job => {
-                                const jobTotal = job.lineItems.reduce((sum, item) => sum + item.amount, 0);
+                                const jobTotal = job.lineItems.reduce((sum, item) => sum + item.amount * (item.quantity || 1), 0);
                                 const isExpanded = expandedJobs[job.id];
 
                                 return (

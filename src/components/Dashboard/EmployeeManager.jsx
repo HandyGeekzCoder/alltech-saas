@@ -6,12 +6,6 @@ const EmployeeManager = () => {
     const { users, loggedInUserId, addEmployeeToClient } = useContext(AdminContext);
     const loggedInUser = users.find(u => u.id === loggedInUserId);
 
-    // An employee can't access this page, but just in case:
-    if (loggedInUser?.parentClientId) return <div style={{ color: 'white', padding: '20px' }}>Access Denied. Only Primary Account Holders can manage employees.</div>;
-
-    const employees = users.filter(u => u.parentClientId === loggedInUserId);
-    const sites = loggedInUser?.sites || [];
-
     const [isAdding, setIsAdding] = useState(false);
     const [empName, setEmpName] = useState('');
     const [empEmail, setEmpEmail] = useState('');
@@ -21,10 +15,17 @@ const EmployeeManager = () => {
     const [canRequestJobs, setCanRequestJobs] = useState(true);
     const [canViewBilling, setCanViewBilling] = useState(false);
 
-    // We store allowed site IDs in an array. 
+    const sites = loggedInUser?.sites || [];
+
+    // We store allowed site IDs in an array.
     // By default, let's select all. The Primary HQ doesn't have an ID in the sites array, it's just the default.
     // Let's use a magic string 'primary-hq' for the main location.
     const [allowedSites, setAllowedSites] = useState(['primary-hq', ...sites.map(s => s.id)]);
+
+    // An employee can't access this page, but just in case:
+    if (loggedInUser?.parentClientId) return <div style={{ color: 'white', padding: '20px' }}>Access Denied. Only Primary Account Holders can manage employees.</div>;
+
+    const employees = users.filter(u => u.parentClientId === loggedInUserId);
 
     const toggleSite = (siteId) => {
         if (allowedSites.includes(siteId)) {

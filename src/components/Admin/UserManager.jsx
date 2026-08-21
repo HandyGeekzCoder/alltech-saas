@@ -52,17 +52,24 @@ const UserManager = () => {
         return password;
     };
 
-    const handleInviteClient = (e) => {
+    const handleInviteClient = async (e) => {
         e.preventDefault();
-        if (inviteCompany && inviteEmail) {
-            const tempPass = generateTempPassword();
-            addClientAccount(inviteCompany, inviteEmail, tempPass);
+        if (!inviteCompany || !inviteEmail) return;
+
+        const tempPass = generateTempPassword();
+        const result = await addClientAccount(inviteCompany, inviteEmail, tempPass);
+
+        if (result?.success) {
             setGeneratedPassword(tempPass);
             setInviteSuccessMsg(`Successfully invited ${inviteCompany}! Provide them the password below.`);
             setInviteCompany('');
             setInviteEmail('');
 
             setTimeout(() => setInviteSuccessMsg(''), 10000);
+        } else {
+            setGeneratedPassword('');
+            setInviteSuccessMsg('');
+            alert('Failed to provision client: ' + (result?.error?.message || 'Unknown error'));
         }
     };
 
@@ -127,7 +134,7 @@ const UserManager = () => {
         const permissions = {
             allowedSites: siteIds,
             canRequestJobs: true,
-            canViewInvoices: false
+            canViewBilling: false
         };
         const tempPass = generateTempPassword();
         const res = await addEmployeeToClient(clientId, newEmpName, newEmpEmail, tempPass, permissions);

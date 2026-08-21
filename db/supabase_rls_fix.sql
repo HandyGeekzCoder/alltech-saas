@@ -122,13 +122,32 @@ create policy "profiles_select_own_or_related" on profiles
 create policy "profiles_update_own_or_admin" on profiles
   for update to authenticated
   using (id = auth.uid() or is_admin())
-  with check (id = auth.uid() or is_admin());
+  with check (
+    is_admin()
+    or (
+      id = auth.uid()
+      and role is not distinct from (select role from public.profiles where id = auth.uid())
+      and permissions is not distinct from (select permissions from public.profiles where id = auth.uid())
+      and parent_client_id is not distinct from (select parent_client_id from public.profiles where id = auth.uid())
+    )
+  );
 
 create policy "profiles_insert_self_or_admin" on profiles
   for insert to authenticated
   with check (
     is_admin()
-    or parent_client_id = auth.uid()  -- a client creating an employee sub-account under themselves
+    or (
+      -- self-registration: a user can only create their own profile as a non-admin, with no parent
+      id = auth.uid()
+      and role in ('client', 'employee')
+      and parent_client_id is null
+    )
+    or (
+      -- a client creating a subordinate employee account under themselves
+      parent_client_id = auth.uid()
+      and id != auth.uid()
+      and role in ('client', 'employee')
+    )
   );
 
 create policy "profiles_delete_admin_only" on profiles
