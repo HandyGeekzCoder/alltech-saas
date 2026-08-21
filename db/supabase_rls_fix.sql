@@ -101,6 +101,42 @@ as $$
 $$;
 
 -- ---------------------------------------------------------------------------
+-- Column-level protection for profiles.
+--
+-- The `profiles_update_own_or_admin` policy cannot reliably compare OLD and
+-- NEW values inside a single-row update using `with check` subqueries: in
+-- PostgreSQL, a non-admin updating their own row may see the already-modified
+-- NEW value in the subquery, allowing them to self-promote to admin or
+-- re-parent themselves. A BEFORE UPDATE trigger sees both OLD and NEW
+-- unambiguously and is the correct place to enforce that only admins can
+-- change role, permissions, or parent_client_id.
+-- ---------------------------------------------------------------------------
+create or replace function public.protect_profile_columns()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not is_admin() then
+    if NEW.role is distinct from OLD.role
+       or NEW.permissions is distinct from OLD.permissions
+       or NEW.parent_client_id is distinct from OLD.parent_client_id
+    then
+      raise exception 'Non-admin users cannot change role, permissions, or parent_client_id';
+    end if;
+  end if;
+  return NEW;
+end;
+$$;
+
+drop trigger if exists protect_profile_columns_trigger on profiles;
+create trigger protect_profile_columns_trigger
+  before update on profiles
+  for each row
+  execute function public.protect_profile_columns();
+
+-- ---------------------------------------------------------------------------
 -- PROFILES
 -- ---------------------------------------------------------------------------
 drop policy if exists "Enable full access for authenticated users" on profiles;
@@ -124,12 +160,7 @@ create policy "profiles_update_own_or_admin" on profiles
   using (id = auth.uid() or is_admin())
   with check (
     is_admin()
-    or (
-      id = auth.uid()
-      and role is not distinct from (select role from public.profiles where id = auth.uid())
-      and permissions is not distinct from (select permissions from public.profiles where id = auth.uid())
-      and parent_client_id is not distinct from (select parent_client_id from public.profiles where id = auth.uid())
-    )
+    or id = auth.uid()
   );
 
 create policy "profiles_insert_self_or_admin" on profiles

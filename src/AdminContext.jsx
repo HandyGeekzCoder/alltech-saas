@@ -913,25 +913,30 @@ export const AdminProvider = ({ children }) => {
             completed_qty: 0
         };
 
-        await supabase.from('tasks').insert([newDBTask]);
-
-        const nextUsers = users.map(user => {
-            if (user.id !== userId) return user;
-            const updatedJobs = user.jobs.map(job => {
-                if (job.id !== jobId) return job;
-                const newTasks = [...(job.tasks || []), newUITask];
-                const newProgress = calculateJobProgress(newTasks);
-                return { ...job, tasks: newTasks, progress: newProgress };
+        let nextJobForDb = null;
+        setUsers(prev => {
+            const nextUsers = prev.map(user => {
+                if (user.id !== userId) return user;
+                const updatedJobs = user.jobs.map(job => {
+                    if (job.id !== jobId) return job;
+                    const newTasks = [...(job.tasks || []), newUITask];
+                    const newProgress = calculateJobProgress(newTasks);
+                    return { ...job, tasks: newTasks, progress: newProgress };
+                });
+                return { ...user, jobs: updatedJobs };
             });
-            return { ...user, jobs: updatedJobs };
+            nextJobForDb = nextUsers.find(u => u.id === userId)?.jobs.find(j => j.id === jobId) || null;
+            return nextUsers;
         });
 
-        const nextJob = nextUsers.find(u => u.id === userId)?.jobs.find(j => j.id === jobId);
-        if (nextJob) {
-            await supabase.from('jobs').update({ progress: nextJob.progress }).eq('id', jobId);
+        try {
+            await supabase.from('tasks').insert([newDBTask]);
+            if (nextJobForDb) {
+                await supabase.from('jobs').update({ progress: nextJobForDb.progress }).eq('id', jobId);
+            }
+        } catch (err) {
+            console.error('Failed to persist new task', err);
         }
-
-        setUsers(nextUsers);
     };
 
     const toggleTaskCompletion = async (userId, jobId, taskId) => {
