@@ -1,5 +1,14 @@
 import puppeteer from 'puppeteer';
 
+const email = process.env.DEBUG_ADMIN_EMAIL;
+const password = process.env.DEBUG_ADMIN_PASSWORD;
+
+if (!email || !password) {
+    throw new Error(
+        'DEBUG_ADMIN_EMAIL and DEBUG_ADMIN_PASSWORD must be set in the environment.',
+    );
+}
+
 (async () => {
     const browser = await puppeteer.launch({ headless: "new" });
     const page = await browser.newPage();
@@ -13,8 +22,8 @@ import puppeteer from 'puppeteer';
     await new Promise(r => setTimeout(r, 1000));
 
     console.log("Filling out Admin credentials...");
-    await page.type('input[type="text"]', 'Admin');
-    await page.type('input[type="password"]', 'Admin');
+    await page.type('input[type="text"]', email);
+    await page.type('input[type="password"]', password);
 
     console.log("Clicking Authenticate...");
     await page.click('button[type="submit"]');
