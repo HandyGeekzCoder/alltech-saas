@@ -65,6 +65,10 @@ export const AdminContext = createContext();
 export const AdminProvider = ({ children }) => {
     const [siteData, setSiteData] = useState(defaultSiteData);
     const [users, setUsers] = useState([]);
+    // Always-current snapshot of users state for handlers that need to read
+    // state outside of a setUsers updater (updaters may be deferred by React).
+    const usersRef = useRef(users);
+    useEffect(() => { usersRef.current = users; }, [users]);
     const [billingCatalog, setBillingCatalog] = useState([]);
     const [taskCatalog, setTaskCatalog] = useState([]);
     const [loggedInUserId, setLoggedInUserId] = useState(() => {
@@ -916,172 +920,154 @@ export const AdminProvider = ({ children }) => {
             completed_qty: 0
         };
 
-        let nextJobForDb = null;
-        setUsers(prev => {
-            const nextUsers = prev.map(user => {
-                if (user.id !== userId) return user;
-                const updatedJobs = user.jobs.map(job => {
-                    if (job.id !== jobId) return job;
-                    const newTasks = [...(job.tasks || []), newUITask];
-                    const newProgress = calculateJobProgress(newTasks);
-                    return { ...job, tasks: newTasks, progress: newProgress };
-                });
-                return { ...user, jobs: updatedJobs };
+        const previousUsers = usersRef.current;
+        const nextUsers = previousUsers.map(user => {
+            if (user.id !== userId) return user;
+            const updatedJobs = user.jobs.map(job => {
+                if (job.id !== jobId) return job;
+                const newTasks = [...(job.tasks || []), newUITask];
+                const newProgress = calculateJobProgress(newTasks);
+                return { ...job, tasks: newTasks, progress: newProgress };
             });
-            nextJobForDb = nextUsers.find(u => u.id === userId)?.jobs.find(j => j.id === jobId) || null;
-            return nextUsers;
+            return { ...user, jobs: updatedJobs };
         });
+        const nextJobForDb = nextUsers.find(u => u.id === userId)?.jobs.find(j => j.id === jobId) || null;
+        setUsers(nextUsers);
 
-        try {
-            await supabase.from('tasks').insert([newDBTask]);
-            if (nextJobForDb) {
-                await supabase.from('jobs').update({ progress: nextJobForDb.progress }).eq('id', jobId);
-            }
-        } catch (err) {
-            console.error('Failed to persist new task', err);
+        const { error: taskError } = await supabase.from('tasks').insert([newDBTask]);
+        let jobError = null;
+        if (!taskError && nextJobForDb) {
+            const { error } = await supabase.from('jobs').update({ progress: nextJobForDb.progress }).eq('id', jobId);
+            jobError = error;
+        }
+        if (taskError || jobError) {
+            console.error('Failed to persist new task', taskError || jobError);
+            setUsers(previousUsers);
         }
     };
 
     const toggleTaskCompletion = async (userId, jobId, taskId) => {
-        let updatePayload = null;
-        let jobSnapshotForDb = null;
-        let previousUsers = null;
+        const previousUsers = usersRef.current;
+        const targetUser = previousUsers.find(u => u.id === userId);
+        const targetJob = targetUser?.jobs.find(j => j.id === jobId);
+        const targetTask = targetJob?.tasks.find(t => t.id === taskId);
+        if (!targetTask) return;
 
-        setUsers(prev => {
-            previousUsers = prev;
-            const targetUser = prev.find(u => u.id === userId);
-            const targetJob = targetUser?.jobs.find(j => j.id === jobId);
-            const targetTask = targetJob?.tasks.find(t => t.id === taskId);
-            if (!targetTask) return prev;
+        const newIsCompleted = !targetTask.isCompleted;
+        const newCompletedQty = newIsCompleted ? (targetTask.quantity || 1) : 0;
+        const updatePayload = { is_completed: newIsCompleted, completed_qty: newCompletedQty };
 
-            const newIsCompleted = !targetTask.isCompleted;
-            const newCompletedQty = newIsCompleted ? (targetTask.quantity || 1) : 0;
-            updatePayload = { is_completed: newIsCompleted, completed_qty: newCompletedQty };
-
-            const nextUsers = prev.map(user => {
-                if (user.id !== userId) return user;
-                const updatedJobs = user.jobs.map(job => {
-                    if (job.id !== jobId) return job;
-                    const newTasks = (job.tasks || []).map(t =>
-                        t.id === taskId
-                            ? { ...t, isCompleted: newIsCompleted, completed_qty: newCompletedQty }
-                            : t
-                    );
-                    const newProgress = calculateJobProgress(newTasks);
-                    let newStatus = job.status;
-                    if (newProgress === 100) {
-                        newStatus = 'Completed';
-                    } else if (newStatus === 'Completed' && newProgress < 100) {
-                        newStatus = 'Active';
-                    }
-                    return { ...job, tasks: newTasks, progress: newProgress, status: newStatus };
-                });
-                return { ...user, jobs: updatedJobs };
+        const nextUsers = previousUsers.map(user => {
+            if (user.id !== userId) return user;
+            const updatedJobs = user.jobs.map(job => {
+                if (job.id !== jobId) return job;
+                const newTasks = (job.tasks || []).map(t =>
+                    t.id === taskId
+                        ? { ...t, isCompleted: newIsCompleted, completed_qty: newCompletedQty }
+                        : t
+                );
+                const newProgress = calculateJobProgress(newTasks);
+                let newStatus = job.status;
+                if (newProgress === 100) {
+                    newStatus = 'Completed';
+                } else if (newStatus === 'Completed' && newProgress < 100) {
+                    newStatus = 'Active';
+                }
+                return { ...job, tasks: newTasks, progress: newProgress, status: newStatus };
             });
-
-            jobSnapshotForDb = nextUsers.find(u => u.id === userId)?.jobs.find(j => j.id === jobId) || null;
-            return nextUsers;
+            return { ...user, jobs: updatedJobs };
         });
 
-        if (!updatePayload) return;
+        const jobSnapshotForDb = nextUsers.find(u => u.id === userId)?.jobs.find(j => j.id === jobId) || null;
+        setUsers(nextUsers);
 
-        try {
-            if (jobSnapshotForDb) {
-                await supabase.from('jobs').update({ progress: jobSnapshotForDb.progress, status: jobSnapshotForDb.status }).eq('id', jobId);
-            }
-            await supabase.from('tasks').update(updatePayload).eq('id', taskId);
-        } catch (err) {
-            console.error('Failed to persist task completion toggle', err);
+        let jobError = null;
+        if (jobSnapshotForDb) {
+            const { error } = await supabase.from('jobs').update({ progress: jobSnapshotForDb.progress, status: jobSnapshotForDb.status }).eq('id', jobId);
+            jobError = error;
+        }
+        const { error: taskError } = await supabase.from('tasks').update(updatePayload).eq('id', taskId);
+        if (jobError || taskError) {
+            console.error('Failed to persist task completion toggle', jobError || taskError);
             setUsers(previousUsers);
         }
     };
 
     const updateTaskQuantity = async (userId, jobId, taskId, increment = true) => {
-        let updatePayload = null;
-        let jobSnapshotForDb = null;
-        let previousUsers = null;
+        const previousUsers = usersRef.current;
+        const targetUser = previousUsers.find(u => u.id === userId);
+        const targetJob = targetUser?.jobs.find(j => j.id === jobId);
+        const targetTask = targetJob?.tasks.find(t => t.id === taskId);
+        if (!targetTask) return;
 
-        setUsers(prev => {
-            previousUsers = prev;
-            const targetUser = prev.find(u => u.id === userId);
-            const targetJob = targetUser?.jobs.find(j => j.id === jobId);
-            const targetTask = targetJob?.tasks.find(t => t.id === taskId);
-            if (!targetTask) return prev;
+        const targetQty = targetTask.quantity || 1;
+        let currentQty = targetTask.completed_qty || 0;
+        if (increment && currentQty < targetQty) currentQty += 1;
+        else if (!increment && currentQty > 0) currentQty -= 1;
 
-            const targetQty = targetTask.quantity || 1;
-            let currentQty = targetTask.completed_qty || 0;
-            if (increment && currentQty < targetQty) currentQty += 1;
-            else if (!increment && currentQty > 0) currentQty -= 1;
+        const finalQty = currentQty;
+        const finalIsCompleted = currentQty === targetQty;
+        const updatePayload = { completed_qty: finalQty, is_completed: finalIsCompleted };
 
-            const finalQty = currentQty;
-            const finalIsCompleted = currentQty === targetQty;
-            updatePayload = { completed_qty: finalQty, is_completed: finalIsCompleted };
-
-            const nextUsers = prev.map(user => {
-                if (user.id !== userId) return user;
-                const updatedJobs = user.jobs.map(job => {
-                    if (job.id !== jobId) return job;
-                    const newTasks = (job.tasks || []).map(t =>
-                        t.id === taskId
-                            ? { ...t, completed_qty: finalQty, isCompleted: finalIsCompleted }
-                            : t
-                    );
-                    const newProgress = calculateJobProgress(newTasks);
-                    let newStatus = job.status;
-                    if (newProgress === 100) {
-                        newStatus = 'Completed';
-                    } else if (newStatus === 'Completed' && newProgress < 100) {
-                        newStatus = 'Active';
-                    }
-                    return { ...job, tasks: newTasks, progress: newProgress, status: newStatus };
-                });
-                return { ...user, jobs: updatedJobs };
+        const nextUsers = previousUsers.map(user => {
+            if (user.id !== userId) return user;
+            const updatedJobs = user.jobs.map(job => {
+                if (job.id !== jobId) return job;
+                const newTasks = (job.tasks || []).map(t =>
+                    t.id === taskId
+                        ? { ...t, completed_qty: finalQty, isCompleted: finalIsCompleted }
+                        : t
+                );
+                const newProgress = calculateJobProgress(newTasks);
+                let newStatus = job.status;
+                if (newProgress === 100) {
+                    newStatus = 'Completed';
+                } else if (newStatus === 'Completed' && newProgress < 100) {
+                    newStatus = 'Active';
+                }
+                return { ...job, tasks: newTasks, progress: newProgress, status: newStatus };
             });
-
-            jobSnapshotForDb = nextUsers.find(u => u.id === userId)?.jobs.find(j => j.id === jobId) || null;
-            return nextUsers;
+            return { ...user, jobs: updatedJobs };
         });
 
-        if (!updatePayload) return;
+        const jobSnapshotForDb = nextUsers.find(u => u.id === userId)?.jobs.find(j => j.id === jobId) || null;
+        setUsers(nextUsers);
 
-        try {
-            if (jobSnapshotForDb) {
-                await supabase.from('jobs').update({ progress: jobSnapshotForDb.progress, status: jobSnapshotForDb.status }).eq('id', jobId);
-            }
-            await supabase.from('tasks').update(updatePayload).eq('id', taskId);
-        } catch (err) {
-            console.error('Failed to persist task quantity update', err);
+        let jobError = null;
+        if (jobSnapshotForDb) {
+            const { error } = await supabase.from('jobs').update({ progress: jobSnapshotForDb.progress, status: jobSnapshotForDb.status }).eq('id', jobId);
+            jobError = error;
+        }
+        const { error: taskError } = await supabase.from('tasks').update(updatePayload).eq('id', taskId);
+        if (jobError || taskError) {
+            console.error('Failed to persist task quantity update', jobError || taskError);
             setUsers(previousUsers);
         }
     };
 
     const deleteTaskFromJob = async (userId, jobId, taskId) => {
-        let jobSnapshotForDb = null;
-        let previousUsers = null;
-
-        setUsers(prev => {
-            previousUsers = prev;
-            const nextUsers = prev.map(user => {
-                if (user.id !== userId) return user;
-                const updatedJobs = user.jobs.map(job => {
-                    if (job.id !== jobId) return job;
-                    const newTasks = (job.tasks || []).filter(t => t.id !== taskId);
-                    const newProgress = calculateJobProgress(newTasks);
-                    return { ...job, tasks: newTasks, progress: newProgress };
-                });
-                return { ...user, jobs: updatedJobs };
+        const previousUsers = usersRef.current;
+        const nextUsers = previousUsers.map(user => {
+            if (user.id !== userId) return user;
+            const updatedJobs = user.jobs.map(job => {
+                if (job.id !== jobId) return job;
+                const newTasks = (job.tasks || []).filter(t => t.id !== taskId);
+                const newProgress = calculateJobProgress(newTasks);
+                return { ...job, tasks: newTasks, progress: newProgress };
             });
-            jobSnapshotForDb = nextUsers.find(u => u.id === userId)?.jobs.find(j => j.id === jobId) || null;
-            return nextUsers;
+            return { ...user, jobs: updatedJobs };
         });
+        const jobSnapshotForDb = nextUsers.find(u => u.id === userId)?.jobs.find(j => j.id === jobId) || null;
+        setUsers(nextUsers);
 
-        try {
-            if (jobSnapshotForDb) {
-                await supabase.from('jobs').update({ progress: jobSnapshotForDb.progress }).eq('id', jobId);
-            }
-            await supabase.from('tasks').delete().eq('id', taskId);
-        } catch (err) {
-            console.error('Failed to delete task', err);
+        let jobError = null;
+        if (jobSnapshotForDb) {
+            const { error } = await supabase.from('jobs').update({ progress: jobSnapshotForDb.progress }).eq('id', jobId);
+            jobError = error;
+        }
+        const { error: taskError } = await supabase.from('tasks').delete().eq('id', taskId);
+        if (jobError || taskError) {
+            console.error('Failed to delete task', jobError || taskError);
             setUsers(previousUsers);
         }
     };
