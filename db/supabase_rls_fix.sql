@@ -32,6 +32,12 @@
 -- shouldn't) rather than a leak.
 -- ============================================================================
 
+-- Ensure the columns the RLS policies rely on exist when this migration is run
+-- against an older database that only has the original schema.
+alter table if exists public.profiles
+  add column if not exists parent_client_id uuid references profiles(id) on delete set null,
+  add column if not exists permissions jsonb default '{}'::jsonb;
+
 -- ---------------------------------------------------------------------------
 -- Helper functions (security definer = bypasses RLS for this one lookup only,
 -- so checking "is this caller an admin" doesn't recurse back through the
@@ -168,9 +174,10 @@ create policy "profiles_insert_self_or_admin" on profiles
   with check (
     is_admin()
     or (
-      -- self-registration: a user can only create their own profile as a non-admin, with no parent
+      -- self-registration: a user can only create their own profile as a client.
+      -- employee accounts must be created by a client/admin (second branch below).
       id = auth.uid()
-      and role in ('client', 'employee')
+      and role = 'client'
       and parent_client_id is null
     )
     or (
