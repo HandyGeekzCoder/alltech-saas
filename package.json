@@ -1,8 +1,7 @@
 {
   "name": "alltech",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "AllTech client portal and admin console",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

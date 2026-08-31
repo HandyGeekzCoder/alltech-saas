@@ -8,7 +8,9 @@ create table profiles (
   email text not null,
   tax_rate numeric default 0,
   is_temporary_password boolean default true,
-  role text default 'client'
+  role text default 'client',
+  parent_client_id uuid references profiles(id) on delete set null,
+  permissions jsonb default '{}'::jsonb
 );
 
 -- JOBS

@@ -1,5 +1,14 @@
 import puppeteer from 'puppeteer';
 
+const email = process.env.DEBUG_CLIENT_EMAIL;
+const password = process.env.DEBUG_CLIENT_PASSWORD;
+
+if (!email || !password) {
+    throw new Error(
+        'DEBUG_CLIENT_EMAIL and DEBUG_CLIENT_PASSWORD must be set in the environment.',
+    );
+}
+
 (async () => {
     const browser = await puppeteer.launch({ headless: "new" });
     const page = await browser.newPage();
@@ -13,10 +22,13 @@ import puppeteer from 'puppeteer';
     await new Promise(r => setTimeout(r, 1000));
 
     console.log("Filling out client credentials...");
-    await page.type('input[type="email"]', 'client@company.com');
-    // From earlier, client password was set to Admin123! or something? Wait, what's a valid client login?
-    // Let's create one first using Admin, or check if we can bypass.
-    // Actually, wait, let's just log the HTML of the Sidebar and see if it contains My Sites.
+    await page.type('input[type="email"]', email);
+    await page.type('input[type="password"]', password);
+
+    console.log("Clicking Authenticate...");
+    await page.click('button[type="submit"]');
+
+    await new Promise(r => setTimeout(r, 3000));
 
     await browser.close();
 })();

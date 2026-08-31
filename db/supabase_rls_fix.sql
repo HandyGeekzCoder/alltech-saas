@@ -32,6 +32,12 @@
 -- shouldn't) rather than a leak.
 -- ============================================================================
 
+-- Ensure the columns the RLS policies rely on exist when this migration is run
+-- against an older database that only has the original schema.
+alter table if exists public.profiles
+  add column if not exists parent_client_id uuid references profiles(id) on delete set null,
+  add column if not exists permissions jsonb default '{}'::jsonb;
+
 -- ---------------------------------------------------------------------------
 -- Helper functions (security definer = bypasses RLS for this one lookup only,
 -- so checking "is this caller an admin" doesn't recurse back through the
@@ -101,6 +107,43 @@ as $$
 $$;
 
 -- ---------------------------------------------------------------------------
+-- Column-level protection for profiles.
+--
+-- The `profiles_update_own_or_admin` policy cannot reliably compare OLD and
+-- NEW values inside a single-row update using `with check` subqueries: in
+-- PostgreSQL, a non-admin updating their own row may see the already-modified
+-- NEW value in the subquery, allowing them to self-promote to admin or
+-- re-parent themselves. A BEFORE UPDATE trigger sees both OLD and NEW
+-- unambiguously and is the correct place to enforce that only admins can
+-- change role, permissions, or parent_client_id.
+-- ---------------------------------------------------------------------------
+create or replace function public.protect_profile_columns()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not is_admin() then
+    if NEW.role is distinct from OLD.role
+       or NEW.permissions is distinct from OLD.permissions
+       or NEW.parent_client_id is distinct from OLD.parent_client_id
+       or NEW.tax_rate is distinct from OLD.tax_rate
+    then
+      raise exception 'Non-admin users cannot change role, permissions, parent_client_id, or tax_rate';
+    end if;
+  end if;
+  return NEW;
+end;
+$$;
+
+drop trigger if exists protect_profile_columns_trigger on profiles;
+create trigger protect_profile_columns_trigger
+  before update on profiles
+  for each row
+  execute function public.protect_profile_columns();
+
+-- ---------------------------------------------------------------------------
 -- PROFILES
 -- ---------------------------------------------------------------------------
 drop policy if exists "Enable full access for authenticated users" on profiles;
@@ -122,13 +165,28 @@ create policy "profiles_select_own_or_related" on profiles
 create policy "profiles_update_own_or_admin" on profiles
   for update to authenticated
   using (id = auth.uid() or is_admin())
-  with check (id = auth.uid() or is_admin());
+  with check (
+    is_admin()
+    or id = auth.uid()
+  );
 
 create policy "profiles_insert_self_or_admin" on profiles
   for insert to authenticated
   with check (
     is_admin()
-    or parent_client_id = auth.uid()  -- a client creating an employee sub-account under themselves
+    or (
+      -- self-registration: a user can only create their own profile as a client.
+      -- employee accounts must be created by a client/admin (second branch below).
+      id = auth.uid()
+      and role = 'client'
+      and parent_client_id is null
+    )
+    or (
+      -- a client creating a subordinate employee account under themselves
+      parent_client_id = auth.uid()
+      and id != auth.uid()
+      and role in ('client', 'employee')
+    )
   );
 
 create policy "profiles_delete_admin_only" on profiles

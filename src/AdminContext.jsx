@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect } from 'react';
+import React, { createContext, useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 
 // Default initial data if LocalStorage/Supabase is empty
@@ -19,7 +19,7 @@ export const calculateUserBalance = (user) => {
     let total = 0;
     user.jobs.forEach(job => {
         job.lineItems.forEach(item => {
-            total += item.amount;
+            total += item.amount * (item.quantity || 1);
         });
     });
     return total;
@@ -65,6 +65,10 @@ export const AdminContext = createContext();
 export const AdminProvider = ({ children }) => {
     const [siteData, setSiteData] = useState(defaultSiteData);
     const [users, setUsers] = useState([]);
+    // Always-current snapshot of users state for handlers that need to read
+    // state outside of a setUsers updater (updaters may be deferred by React).
+    const usersRef = useRef(users);
+    useEffect(() => { usersRef.current = users; }, [users]);
     const [billingCatalog, setBillingCatalog] = useState([]);
     const [taskCatalog, setTaskCatalog] = useState([]);
     const [loggedInUserId, setLoggedInUserId] = useState(() => {
@@ -73,9 +77,11 @@ export const AdminProvider = ({ children }) => {
     });
 
     const [isLoading, setIsLoading] = useState(true);
+    const isLoadingRef = useRef(true);
 
     const fetchRemoteData = async () => {
         setIsLoading(true);
+        isLoadingRef.current = true;
         try {
             // 1. Fetch site data
             const { data: siteRes } = await supabase.from('site_data').select('*');
@@ -199,9 +205,11 @@ export const AdminProvider = ({ children }) => {
             }
 
             setIsLoading(false);
+            isLoadingRef.current = false;
         } catch (err) {
             console.error("Supabase data fetch failed", err);
             setIsLoading(false);
+            isLoadingRef.current = false;
         }
     };
 
@@ -211,9 +219,10 @@ export const AdminProvider = ({ children }) => {
 
         // Add a safety timeout in case the Supabase connection hangs indefinitely
         const timeoutId = setTimeout(() => {
-            if (isLoading) {
+            if (isLoadingRef.current) {
                 console.warn("Supabase fetch timeout. Forcing app load.");
                 setIsLoading(false);
+                isLoadingRef.current = false;
             }
         }, 5000);
 
@@ -340,9 +349,12 @@ export const AdminProvider = ({ children }) => {
             password: tempPassword,
         });
 
-        if (authError) {
+        if (authError || !authData?.user) {
             console.error("Auth creation failed:", authError);
-            return;
+            return {
+                success: false,
+                error: authError || { message: 'Account could not be created. Email confirmation may be required or the address is already in use.' }
+            };
         }
 
         if (adminSession) {
@@ -352,36 +364,39 @@ export const AdminProvider = ({ children }) => {
             });
         }
 
-        if (authData?.user) {
-            const newProfile = {
-                id: authData.user.id,
-                company,
-                email,
-                is_temporary_password: true,
-                role: 'client'
-            };
+        const newProfile = {
+            id: authData.user.id,
+            company,
+            email,
+            is_temporary_password: true,
+            role: 'client'
+        };
 
-            // Insert into our Profiles table
-            const { error: profileError } = await supabase.from('profiles').insert(newProfile);
+        // Insert into our Profiles table
+        const { error: profileError } = await supabase.from('profiles').insert(newProfile);
 
-            if (!profileError) {
-                // Optimistically update the UI so the admin sees the new account instantly without refreshing
-                const uiUser = {
-                    id: newProfile.id,
-                    company: newProfile.company,
-                    email: newProfile.email,
-                    taxRate: 0,
-                    isTemporaryPassword: newProfile.is_temporary_password,
-                    role: newProfile.role,
-                    parentClientId: null,
-                    permissions: {},
-                    sites: [],
-                    jobs: [],
-                    password: tempPassword // keep this just for the admin UI to display it
-                };
-                setUsers(prev => [...prev, uiUser]);
-            }
+        if (profileError) {
+            console.error("Profile creation failed:", profileError);
+            // No service-role client is available here to delete the orphaned auth user.
+            return { success: false, error: profileError, tempPassword };
         }
+
+        // Optimistically update the UI so the admin sees the new account instantly without refreshing
+        const uiUser = {
+            id: newProfile.id,
+            company: newProfile.company,
+            email: newProfile.email,
+            taxRate: 0,
+            isTemporaryPassword: newProfile.is_temporary_password,
+            role: newProfile.role,
+            parentClientId: null,
+            permissions: {},
+            sites: [],
+            jobs: [],
+            password: tempPassword // keep this just for the admin UI to display it
+        };
+        setUsers(prev => [...prev, uiUser]);
+        return { success: true, tempPassword };
     };
 
     const updateClientProfile = async (clientId, company, email, taxRate) => {
@@ -406,7 +421,7 @@ export const AdminProvider = ({ children }) => {
 
         if (authError || !authData?.user) {
             console.error("Auth creation failed:", authError);
-            return { error: authError };
+            return { success: false, error: authError };
         }
 
         if (adminSession) {
@@ -428,28 +443,31 @@ export const AdminProvider = ({ children }) => {
 
         const { error: profileError } = await supabase.from('profiles').insert(newProfile);
 
-        if (!profileError) {
-            // Find parent to inherit jobs and sites for the UI state
-            setUsers(prev => {
-                const parent = prev.find(u => u.id === parentClientId);
-                const uiUser = {
-                    id: newProfile.id,
-                    company: newProfile.company,
-                    email: newProfile.email,
-                    taxRate: 0,
-                    isTemporaryPassword: newProfile.is_temporary_password,
-                    role: newProfile.role,
-                    parentClientId: newProfile.parent_client_id,
-                    permissions: newProfile.permissions,
-                    sites: parent ? parent.sites : [],
-                    jobs: parent ? parent.jobs : [],
-                    password: tempPassword
-                };
-                return [...prev, uiUser];
-            });
-            return { success: true };
+        if (profileError) {
+            console.error("Profile creation failed:", profileError);
+            // No service-role client is available here to delete the orphaned auth user.
+            return { success: false, error: profileError };
         }
-        return { error: profileError };
+
+        // Find parent to inherit jobs and sites for the UI state
+        setUsers(prev => {
+            const parent = prev.find(u => u.id === parentClientId);
+            const uiUser = {
+                id: newProfile.id,
+                company: newProfile.company,
+                email: newProfile.email,
+                taxRate: 0,
+                isTemporaryPassword: newProfile.is_temporary_password,
+                role: newProfile.role,
+                parentClientId: newProfile.parent_client_id,
+                permissions: newProfile.permissions,
+                sites: parent ? parent.sites : [],
+                jobs: parent ? parent.jobs : [],
+                password: tempPassword
+            };
+            return [...prev, uiUser];
+        });
+        return { success: true, tempPassword };
     };
 
     const updateClientPassword = async (userId, newPassword) => {
@@ -902,146 +920,156 @@ export const AdminProvider = ({ children }) => {
             completed_qty: 0
         };
 
-        await supabase.from('tasks').insert([newDBTask]);
+        const previousUsers = usersRef.current;
+        const nextUsers = previousUsers.map(user => {
+            if (user.id !== userId) return user;
+            const updatedJobs = user.jobs.map(job => {
+                if (job.id !== jobId) return job;
+                const newTasks = [...(job.tasks || []), newUITask];
+                const newProgress = calculateJobProgress(newTasks);
+                return { ...job, tasks: newTasks, progress: newProgress };
+            });
+            return { ...user, jobs: updatedJobs };
+        });
+        const nextJobForDb = nextUsers.find(u => u.id === userId)?.jobs.find(j => j.id === jobId) || null;
+        setUsers(nextUsers);
 
-        setUsers(prev => prev.map(user => {
-            if (user.id === userId) {
-                const updatedJobs = user.jobs.map(job => {
-                    if (job.id === jobId) {
-                        const newTasks = [
-                            ...(job.tasks || []),
-                            newUITask
-                        ];
-                        // Recalculate progress
-                        const newProgress = calculateJobProgress(newTasks);
-                        // Fire-and-forget job progress update to DB
-                        supabase.from('jobs').update({ progress: newProgress }).eq('id', jobId).then();
-
-                        return { ...job, tasks: newTasks, progress: newProgress };
-                    }
-                    return job;
-                });
-                return { ...user, jobs: updatedJobs };
-            }
-            return user;
-        }));
+        const { error: taskError } = await supabase.from('tasks').insert([newDBTask]);
+        let jobError = null;
+        if (!taskError && nextJobForDb) {
+            const { error } = await supabase.from('jobs').update({ progress: nextJobForDb.progress }).eq('id', jobId);
+            jobError = error;
+        }
+        if (taskError || jobError) {
+            console.error('Failed to persist new task', taskError || jobError);
+            setUsers(previousUsers);
+        }
     };
 
     const toggleTaskCompletion = async (userId, jobId, taskId) => {
-        let newIsCompleted = false;
-        let newCompletedQty = 0;
+        const previousUsers = usersRef.current;
+        const targetUser = previousUsers.find(u => u.id === userId);
+        const targetJob = targetUser?.jobs.find(j => j.id === jobId);
+        const targetTask = targetJob?.tasks.find(t => t.id === taskId);
+        if (!targetTask) return;
 
-        setUsers(prev => prev.map(user => {
-            if (user.id === userId) {
-                const updatedJobs = user.jobs.map(job => {
-                    if (job.id === jobId) {
-                        const newTasks = (job.tasks || []).map(t => {
-                            if (t.id === taskId) {
-                                newIsCompleted = !t.isCompleted;
-                                newCompletedQty = newIsCompleted ? (t.quantity || 1) : 0;
-                                return { ...t, isCompleted: newIsCompleted, completed_qty: newCompletedQty };
-                            }
-                            return t;
-                        });
+        const newIsCompleted = !targetTask.isCompleted;
+        const newCompletedQty = newIsCompleted ? (targetTask.quantity || 1) : 0;
+        const updatePayload = { is_completed: newIsCompleted, completed_qty: newCompletedQty };
 
-                        // Recalculate progress
-                        const newProgress = calculateJobProgress(newTasks);
-                        // Also auto-update status to Completed if progress hits 100
-                        let newStatus = job.status;
-                        if (newProgress === 100) {
-                            newStatus = 'Completed';
-                        } else if (newStatus === 'Completed' && newProgress < 100) {
-                            newStatus = 'Active';
-                        }
+        const nextUsers = previousUsers.map(user => {
+            if (user.id !== userId) return user;
+            const updatedJobs = user.jobs.map(job => {
+                if (job.id !== jobId) return job;
+                const newTasks = (job.tasks || []).map(t =>
+                    t.id === taskId
+                        ? { ...t, isCompleted: newIsCompleted, completed_qty: newCompletedQty }
+                        : t
+                );
+                const newProgress = calculateJobProgress(newTasks);
+                let newStatus = job.status;
+                if (newProgress === 100) {
+                    newStatus = 'Completed';
+                } else if (newStatus === 'Completed' && newProgress < 100) {
+                    newStatus = 'Active';
+                }
+                return { ...job, tasks: newTasks, progress: newProgress, status: newStatus };
+            });
+            return { ...user, jobs: updatedJobs };
+        });
 
-                        // Fire-and-forget sync wrapper
-                        const syncJobStats = async () => {
-                            await supabase.from('jobs').update({ progress: newProgress, status: newStatus }).eq('id', jobId);
-                            await supabase.from('tasks').update({ is_completed: newIsCompleted, completed_qty: newCompletedQty }).eq('id', taskId);
-                        };
-                        syncJobStats();
+        const jobSnapshotForDb = nextUsers.find(u => u.id === userId)?.jobs.find(j => j.id === jobId) || null;
+        setUsers(nextUsers);
 
-                        return { ...job, tasks: newTasks, progress: newProgress, status: newStatus };
-                    }
-                    return job;
-                });
-                return { ...user, jobs: updatedJobs };
-            }
-            return user;
-        }));
+        let jobError = null;
+        if (jobSnapshotForDb) {
+            const { error } = await supabase.from('jobs').update({ progress: jobSnapshotForDb.progress, status: jobSnapshotForDb.status }).eq('id', jobId);
+            jobError = error;
+        }
+        const { error: taskError } = await supabase.from('tasks').update(updatePayload).eq('id', taskId);
+        if (jobError || taskError) {
+            console.error('Failed to persist task completion toggle', jobError || taskError);
+            setUsers(previousUsers);
+        }
     };
 
     const updateTaskQuantity = async (userId, jobId, taskId, increment = true) => {
-        let finalQty = 0;
-        let finalIsCompleted = false;
+        const previousUsers = usersRef.current;
+        const targetUser = previousUsers.find(u => u.id === userId);
+        const targetJob = targetUser?.jobs.find(j => j.id === jobId);
+        const targetTask = targetJob?.tasks.find(t => t.id === taskId);
+        if (!targetTask) return;
 
-        setUsers(prev => prev.map(user => {
-            if (user.id === userId) {
-                const updatedJobs = user.jobs.map(job => {
-                    if (job.id === jobId) {
-                        const newTasks = (job.tasks || []).map(t => {
-                            if (t.id === taskId) {
-                                const targetQty = t.quantity || 1;
-                                let currentQty = t.completed_qty || 0;
+        const targetQty = targetTask.quantity || 1;
+        let currentQty = targetTask.completed_qty || 0;
+        if (increment && currentQty < targetQty) currentQty += 1;
+        else if (!increment && currentQty > 0) currentQty -= 1;
 
-                                if (increment && currentQty < targetQty) currentQty += 1;
-                                else if (!increment && currentQty > 0) currentQty -= 1;
+        const finalQty = currentQty;
+        const finalIsCompleted = currentQty === targetQty;
+        const updatePayload = { completed_qty: finalQty, is_completed: finalIsCompleted };
 
-                                finalQty = currentQty;
-                                finalIsCompleted = currentQty === targetQty;
+        const nextUsers = previousUsers.map(user => {
+            if (user.id !== userId) return user;
+            const updatedJobs = user.jobs.map(job => {
+                if (job.id !== jobId) return job;
+                const newTasks = (job.tasks || []).map(t =>
+                    t.id === taskId
+                        ? { ...t, completed_qty: finalQty, isCompleted: finalIsCompleted }
+                        : t
+                );
+                const newProgress = calculateJobProgress(newTasks);
+                let newStatus = job.status;
+                if (newProgress === 100) {
+                    newStatus = 'Completed';
+                } else if (newStatus === 'Completed' && newProgress < 100) {
+                    newStatus = 'Active';
+                }
+                return { ...job, tasks: newTasks, progress: newProgress, status: newStatus };
+            });
+            return { ...user, jobs: updatedJobs };
+        });
 
-                                return { ...t, completed_qty: finalQty, isCompleted: finalIsCompleted };
-                            }
-                            return t;
-                        });
+        const jobSnapshotForDb = nextUsers.find(u => u.id === userId)?.jobs.find(j => j.id === jobId) || null;
+        setUsers(nextUsers);
 
-                        const newProgress = calculateJobProgress(newTasks);
-                        let newStatus = job.status;
-                        if (newProgress === 100) {
-                            newStatus = 'Completed';
-                        } else if (newStatus === 'Completed' && newProgress < 100) {
-                            newStatus = 'Active';
-                        }
-
-                        const syncJobStats = async () => {
-                            await supabase.from('jobs').update({ progress: newProgress, status: newStatus }).eq('id', jobId);
-                            await supabase.from('tasks').update({ completed_qty: finalQty, is_completed: finalIsCompleted }).eq('id', taskId);
-                        };
-                        syncJobStats();
-
-                        return { ...job, tasks: newTasks, progress: newProgress, status: newStatus };
-                    }
-                    return job;
-                });
-                return { ...user, jobs: updatedJobs };
-            }
-            return user;
-        }));
+        let jobError = null;
+        if (jobSnapshotForDb) {
+            const { error } = await supabase.from('jobs').update({ progress: jobSnapshotForDb.progress, status: jobSnapshotForDb.status }).eq('id', jobId);
+            jobError = error;
+        }
+        const { error: taskError } = await supabase.from('tasks').update(updatePayload).eq('id', taskId);
+        if (jobError || taskError) {
+            console.error('Failed to persist task quantity update', jobError || taskError);
+            setUsers(previousUsers);
+        }
     };
 
     const deleteTaskFromJob = async (userId, jobId, taskId) => {
-        setUsers(prev => prev.map(user => {
-            if (user.id === userId) {
-                const updatedJobs = user.jobs.map(job => {
-                    if (job.id === jobId) {
-                        const newTasks = (job.tasks || []).filter(t => t.id !== taskId);
-                        // Recalculate progress
-                        const newProgress = calculateJobProgress(newTasks);
+        const previousUsers = usersRef.current;
+        const nextUsers = previousUsers.map(user => {
+            if (user.id !== userId) return user;
+            const updatedJobs = user.jobs.map(job => {
+                if (job.id !== jobId) return job;
+                const newTasks = (job.tasks || []).filter(t => t.id !== taskId);
+                const newProgress = calculateJobProgress(newTasks);
+                return { ...job, tasks: newTasks, progress: newProgress };
+            });
+            return { ...user, jobs: updatedJobs };
+        });
+        const jobSnapshotForDb = nextUsers.find(u => u.id === userId)?.jobs.find(j => j.id === jobId) || null;
+        setUsers(nextUsers);
 
-                        const syncJobStats = async () => {
-                            await supabase.from('jobs').update({ progress: newProgress }).eq('id', jobId);
-                            await supabase.from('tasks').delete().eq('id', taskId);
-                        };
-                        syncJobStats();
-
-                        return { ...job, tasks: newTasks, progress: newProgress };
-                    }
-                    return job;
-                });
-                return { ...user, jobs: updatedJobs };
-            }
-            return user;
-        }));
+        let jobError = null;
+        if (jobSnapshotForDb) {
+            const { error } = await supabase.from('jobs').update({ progress: jobSnapshotForDb.progress }).eq('id', jobId);
+            jobError = error;
+        }
+        const { error: taskError } = await supabase.from('tasks').delete().eq('id', taskId);
+        if (jobError || taskError) {
+            console.error('Failed to delete task', jobError || taskError);
+            setUsers(previousUsers);
+        }
     };
 
     return (
