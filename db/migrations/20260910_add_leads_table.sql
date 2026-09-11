@@ -1,5 +1,6 @@
 -- Leads table for anonymous hero-form submissions
--- Insert-only access for anon role; no SELECT/UPDATE/DELETE to keep prior data private.
+-- Insert-only access for anon role, scoped by rate limit.
+-- Read/update/delete restricted to admin staff via the existing is_admin() helper.
 
 create table leads (
   id uuid default gen_random_uuid() primary key,
@@ -11,38 +12,59 @@ create table leads (
   created_at timestamptz default now() not null
 );
 
--- Rate-limit helper: prevent rapid re-submission from the same phone
 comment on table leads is 'Inbound lead submissions from the public website.';
+
+-- Index to support the rate-limit check quickly.
 create index idx_leads_phone_created_at on leads(phone, created_at desc);
 
 alter table leads enable row level security;
 
--- Anonymous visitors can only insert. No read/update/delete.
+-- Rate-limit helper: at most one lead per phone number per 5 minutes.
+-- Security definer so the anon insert policy can read the count without
+-- needing broader SELECT permissions on the table.
+create or replace function public.can_insert_lead(p_phone text)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select not exists (
+    select 1
+    from public.leads
+    where phone = p_phone
+      and created_at > now() - interval '5 minutes'
+  );
+$$;
+
+-- Anonymous visitors can insert one lead per phone every 5 minutes.
 create policy "Anonymous users can insert leads"
   on leads
   for insert
   to anon
-  with check (true);
+  with check (public.can_insert_lead(phone));
 
--- Authenticated users (AllTek staff) can read and manage leads
-create policy "Authenticated users can read leads"
+-- Only admins can view leads.
+create policy "Admins can read leads"
   on leads
   for select
   to authenticated
-  using (true);
+  using (public.is_admin());
 
-create policy "Authenticated users can update leads"
+-- Only admins can update leads.
+create policy "Admins can update leads"
   on leads
   for update
   to authenticated
-  using (true)
-  with check (true);
+  using (public.is_admin())
+  with check (public.is_admin());
 
-create policy "Authenticated users can delete leads"
+-- Only admins can delete leads.
+create policy "Admins can delete leads"
   on leads
   for delete
   to authenticated
-  using (true);
+  using (public.is_admin());
 
 -- NOTE: Instant email/SMS notification on insert should be wired via a Supabase
 -- Database Webhook or Edge Function once an email provider (SendGrid, Postmark,
